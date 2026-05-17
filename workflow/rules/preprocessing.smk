@@ -1,8 +1,13 @@
 """Preprocessing rules: data loading, cell-type deconvolution (EpiDISH), CellDMC.
 
-Phase 1 of the v2.2 analysis plan.
+Phase 0 gates and Phase 1 of the v2.2 analysis plan.
 
 Rules implemented:
+  Phase 0 gates:
+  - step_0_T_pca_delta: Gate 0-T PCA of Emory paired delta-vectors
+  - step_0_C_epidish_validation: Gate 0-C cell-type deconvolution validation
+  - step_0_S_source_domain: Gate 0-S source-domain classifier (Emory vs BEST)
+  Phase 1 (stubs):
   - load_emory: RData -> parquet (functional)
   - load_best: RData -> parquet (functional)
   - epidish_emory: EpiDISH cell-type fraction estimation (stub)
@@ -18,6 +23,55 @@ from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Rule: load_emory — RData -> parquet
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Phase 0 gate rules
+# ---------------------------------------------------------------------------
+
+rule step_0_T_pca_delta:
+    """Gate 0-T: PCA of Emory paired delta-vectors with PERMANOVA."""
+    output:
+        results   = "analysis/2026-05-17-phase-0/0-T/gate_0T_results.json",
+        loadings  = "analysis/2026-05-17-phase-0/0-T/gate_0T_loadings.csv",
+        fig_png   = "analysis/2026-05-17-phase-0/0-T/gate_0T_pca_arrows.png",
+    log:
+        "analysis/2026-05-17-phase-0/0-T/gate_0T.log",
+    conda:
+        "../envs/python-scientific.yaml"
+    shell:
+        "python scripts/01_phase0_gate_T.py > {log} 2>&1"
+
+
+rule step_0_C_epidish_validation:
+    """Gate 0-C: EpiDISH cell-type deconvolution validation."""
+    output:
+        results   = "analysis/2026-05-17-phase-0/0-C/gate_0C_results.json",
+        fig_png   = "analysis/2026-05-17-phase-0/0-C/gate_0C_delta_props_hist.png",
+    log:
+        "analysis/2026-05-17-phase-0/0-C/gate_0C.log",
+    conda:
+        "../envs/python-scientific.yaml"
+    shell:
+        "python scripts/01_phase0_gate_C.py > {log} 2>&1"
+
+
+rule step_0_S_source_domain:
+    """Gate 0-S: source-domain classifier (Emory vs BEST covariate shift)."""
+    output:
+        results   = "analysis/2026-05-17-phase-0/0-S/gate_0S_classifier.json",
+        features  = "analysis/2026-05-17-phase-0/0-S/gate_0S_top_shifted_features.csv",
+        fig_png   = "analysis/2026-05-17-phase-0/0-S/gate_0S_auc_roc.png",
+    log:
+        "analysis/2026-05-17-phase-0/0-S/gate_0S.log",
+    conda:
+        "../envs/python-scientific.yaml"
+    shell:
+        "python scripts/01_phase0_gate_S.py > {log} 2>&1"
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 data loading rules
 # ---------------------------------------------------------------------------
 
 rule load_emory:

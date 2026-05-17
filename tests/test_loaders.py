@@ -12,9 +12,7 @@ from unittest.mock import patch
 
 import pandas as pd
 import pytest
-
 from dnamrnaseq2026.data.loaders import check_sample_alignment
-
 
 # ---------------------------------------------------------------------------
 # check_sample_alignment tests
@@ -38,13 +36,7 @@ class TestCheckSampleAlignment:
         synthetic_pdata_emory: pd.DataFrame,
     ) -> None:
         """ValueError when bVals has samples missing from pData2 index."""
-        # Add an extra sample to bVals columns that is not in pData2
-        extra_col = pd.Series(0.5, index=synthetic_bvals_emory.index, name="orphan_sample")
-        bvals_extended = pd.concat(
-            [synthetic_bvals_emory, extra_col.to_frame().T],
-            axis=1,
-        )
-        # Wait — bvals has CpG as index, samples as columns. Rebuild properly.
+        # bvals has CpG as index, samples as columns; build an orphan column properly.
         import numpy as np
 
         extra = pd.DataFrame(

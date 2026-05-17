@@ -69,7 +69,9 @@ def main() -> None:
     bvals_samples = set(bvals.columns)
     pdata_samples = set(pdata.index)
     overlap = bvals_samples & pdata_samples
-    logger.info("Sample alignment: %d/%d bVals samples found in pData2", len(overlap), len(bvals_samples))
+    logger.info(
+        "Sample alignment: %d/%d bVals samples found in pData2", len(overlap), len(bvals_samples)
+    )
 
     # Write to parquet (bVals transposed: samples x CpGs for easier downstream use)
     output_path.parent.mkdir(parents=True, exist_ok=True)

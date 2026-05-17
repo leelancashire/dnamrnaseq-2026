@@ -20,8 +20,9 @@ The join key between bVals columns and pData2 rows is `SampleName`
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 import pandas as pd
 
@@ -37,15 +38,15 @@ logger = logging.getLogger(__name__)
 
 def _load_rdata_pyreadr(path: Path) -> dict[str, pd.DataFrame]:
     """Load an RData file via pyreadr. Returns {object_name: DataFrame}."""
-    import pyreadr  # type: ignore[import-untyped]
+    import pyreadr
 
     result = pyreadr.read_r(str(path))
     return dict(result)
 
 
 def _rdata_squeeze_dataframe_constructor(
-    obj: dict[str, object],
-    attrs: dict[str, object],
+    obj: Any,
+    attrs: Mapping[str, Any],
 ) -> pd.DataFrame:
     """Custom rdata DataFrame constructor that squeezes (N,1) ndarray columns.
 
@@ -55,16 +56,16 @@ def _rdata_squeeze_dataframe_constructor(
     ("Data must be 1-dimensional, got ndarray of shape (N,1)"). This constructor
     squeezes such columns before building the DataFrame.
     """
-    import numpy as np  # type: ignore[import-untyped]
+    import numpy as np
 
-    squeezed: dict[str, object] = {}
+    squeezed: dict[str, Any] = {}
     for k, v in obj.items():
         if isinstance(v, np.ndarray) and v.ndim == 2 and v.shape[1] == 1:
             squeezed[k] = v.squeeze(axis=1)
         else:
             squeezed[k] = v
 
-    index = attrs.get("row.names", None) if attrs else None
+    index = attrs.get("row.names") if attrs else None
     return pd.DataFrame(squeezed, index=index)
 
 
@@ -75,8 +76,8 @@ def _load_rdata_rdata(path: Path, object_name: str) -> pd.DataFrame:
     to handle the ndarray-(N,1) column issue in pData2 files from
     minfi/Bioconductor pipelines.
     """
-    import numpy as np  # type: ignore[import-untyped]
-    import rdata  # type: ignore[import-untyped]
+    import numpy as np
+    import rdata
 
     parsed = rdata.parser.parse_file(str(path))
 
@@ -88,8 +89,7 @@ def _load_rdata_rdata(path: Path, object_name: str) -> pd.DataFrame:
     if object_name not in converted:
         available = list(converted.keys())
         raise KeyError(
-            f"Object '{object_name}' not found in {path.name}. "
-            f"Available: {available}"
+            f"Object '{object_name}' not found in {path.name}. " f"Available: {available}"
         )
 
     obj = converted[object_name]
@@ -97,9 +97,7 @@ def _load_rdata_rdata(path: Path, object_name: str) -> pd.DataFrame:
         return obj
     if isinstance(obj, np.ndarray):
         return pd.DataFrame(obj)
-    raise TypeError(
-        f"Object '{object_name}' loaded as {type(obj).__name__}, expected DataFrame."
-    )
+    raise TypeError(f"Object '{object_name}' loaded as {type(obj).__name__}, expected DataFrame.")
 
 
 def _load_rdata(
@@ -156,7 +154,7 @@ def _load_rdata(
 # ---------------------------------------------------------------------------
 
 
-def load_emory_bvals(data_dir: Optional[Path] = None) -> pd.DataFrame:
+def load_emory_bvals(data_dir: Path | None = None) -> pd.DataFrame:
     """Load Emory DNAm beta values (architecture CpG subset).
 
     Returns a DataFrame of shape (n_cpgs, n_samples).
@@ -183,7 +181,7 @@ def load_emory_bvals(data_dir: Optional[Path] = None) -> pd.DataFrame:
     return df
 
 
-def load_emory_pdata2(data_dir: Optional[Path] = None) -> pd.DataFrame:
+def load_emory_pdata2(data_dir: Path | None = None) -> pd.DataFrame:
     """Load Emory pData2 (sample metadata / covariates).
 
     Returns a DataFrame of shape (n_samples, n_covariates).
@@ -221,7 +219,7 @@ def load_emory_pdata2(data_dir: Optional[Path] = None) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def load_best_bvals(data_dir: Optional[Path] = None) -> pd.DataFrame:
+def load_best_bvals(data_dir: Path | None = None) -> pd.DataFrame:
     """Load BEST DNAm beta values (architecture CpG subset).
 
     Returns a DataFrame of shape (n_cpgs, n_samples).
@@ -248,7 +246,7 @@ def load_best_bvals(data_dir: Optional[Path] = None) -> pd.DataFrame:
     return df
 
 
-def load_best_pdata2(data_dir: Optional[Path] = None) -> pd.DataFrame:
+def load_best_pdata2(data_dir: Path | None = None) -> pd.DataFrame:
     """Load BEST pData2 (sample metadata / covariates).
 
     Returns a DataFrame of shape (n_samples, n_covariates).
@@ -322,6 +320,102 @@ def check_sample_alignment(
             f"{len(missing_from_pdata)} bVals samples not found in pData2 index. "
             f"First 5: {sorted(missing_from_pdata)[:5]}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Public loaders — RNA-seq (mmVAE CSV format)
+# ---------------------------------------------------------------------------
+
+
+def load_emory_rnaseq(mmvae_dir: Path | None = None) -> pd.DataFrame:
+    """Load Emory RNA-seq log-CPM matrix from mmVAE CSV.
+
+    Returns a DataFrame of shape (n_genes, n_samples).
+    Columns are in format '{SubjectID}-{Visit}' (e.g. 'AMC-280058-POST-IOP').
+    Index: gene identifiers (Ensembl or symbol depending on source prep).
+
+    Parameters
+    ----------
+    mmvae_dir:
+        Override the mmVAE data directory from config.yaml.
+
+    Returns
+    -------
+    pd.DataFrame
+        Index: gene IDs. Columns: sample IDs ({SubjectID}-{Visit}).
+    """
+    from dnamrnaseq2026.data.config import get_emory_mmvae_dir
+
+    data_dir = mmvae_dir or get_emory_mmvae_dir()
+    path = Path(data_dir) / "emory.rnaseq.data.csv"
+    if not path.exists():
+        raise FileNotFoundError(f"Emory RNA-seq not found at {path}. Check config.yaml.")
+
+    logger.info("Loading Emory RNA-seq log-CPM (mmVAE CSV)...")
+    df = pd.read_csv(str(path), index_col=0)
+    logger.info("  emory.rnaseq: %s  [genes x samples]", df.shape)
+    return df
+
+
+def load_best_rnaseq(mmvae_dir: Path | None = None) -> pd.DataFrame:
+    """Load BEST RNA-seq log-CPM matrix from mmVAE CSV.
+
+    Returns a DataFrame of shape (n_genes, n_samples).
+    Columns are in format '{SubjectID}-{Visit}'.
+
+    Parameters
+    ----------
+    mmvae_dir:
+        Override the mmVAE data directory from config.yaml.
+
+    Returns
+    -------
+    pd.DataFrame
+        Index: gene IDs. Columns: sample IDs ({SubjectID}-{Visit}).
+    """
+    from dnamrnaseq2026.data.config import get_emory_mmvae_dir
+
+    data_dir = mmvae_dir or get_emory_mmvae_dir()
+    path = Path(data_dir) / "best.rnaseq.data.csv"
+    if not path.exists():
+        raise FileNotFoundError(f"BEST RNA-seq not found at {path}. Check config.yaml.")
+
+    logger.info("Loading BEST RNA-seq log-CPM (mmVAE CSV)...")
+    df = pd.read_csv(str(path), index_col=0)
+    logger.info("  best.rnaseq: %s  [genes x samples]", df.shape)
+    return df
+
+
+def load_emory_subject_data(mmvae_dir: Path | None = None) -> pd.DataFrame:
+    """Load Emory subject metadata (Response, Visit, SampleName mappings).
+
+    The mmVAE CSV has string Response labels ('R'/'NR') unlike pData2's
+    numeric codes. This is the preferred source for Response labels.
+
+    Returns a DataFrame with columns: Subcode, Visit, age, sex, Response,
+    SampleName_RNASeq, SampleName_DNAm, id.
+
+    Parameters
+    ----------
+    mmvae_dir:
+        Override the mmVAE data directory from config.yaml.
+
+    Returns
+    -------
+    pd.DataFrame
+        Index: row number. Columns include Response (str: 'R'/'NR') and Visit.
+    """
+    from dnamrnaseq2026.data.config import get_emory_mmvae_dir
+
+    data_dir = mmvae_dir or get_emory_mmvae_dir()
+    path = Path(data_dir) / "emory.subject.data.csv"
+    if not path.exists():
+        raise FileNotFoundError(f"Emory subject data not found at {path}. Check config.yaml.")
+
+    logger.info("Loading Emory subject data...")
+    df = pd.read_csv(str(path), index_col=0)
+    logger.info("  emory.subject.data: %s", df.shape)
+    return df
 
 
 # ---------------------------------------------------------------------------

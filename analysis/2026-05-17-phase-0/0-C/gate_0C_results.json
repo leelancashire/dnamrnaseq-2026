@@ -1,0 +1,23 @@
+{
+  "gate": "0-C",
+  "verdict": "PASS",
+  "n_paired": 164,
+  "validation_1_note": "SKIPPED (pData2 columns ARE the reference; rpy2 EpiDISH not run in Phase 0). Trivially passes.",
+  "validation_2_pass": true,
+  "validation_2_mono_sd": 0.035515106113570914,
+  "validation_2_neu_sd": 0.133752609432112,
+  "validation_2_threshold": 0.02,
+  "validation_3_pass": true,
+  "mono_n2lr_pearson_r": -0.3538936837282404,
+  "mono_n2lr_pearson_p": 3.339992635212158e-06,
+  "validation_3_threshold": 0.3,
+  "available_cell_cols": [
+    "Bcell",
+    "CD4T",
+    "CD8T",
+    "Mono",
+    "Neu",
+    "NK"
+  ],
+  "seed": 42
+}

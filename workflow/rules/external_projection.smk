@@ -1,8 +1,30 @@
 """External cohort projection rules: GSE98793, GTEx, AURORA.
 
-Phase 4 of the v2.2 analysis plan. All stubs.
+Phase 0 Gate 0-X and Phase 4 of the v2.2 analysis plan.
 """
 
+
+# ---------------------------------------------------------------------------
+# Phase 0: Gate 0-X cross-disorder centroid projection
+# ---------------------------------------------------------------------------
+
+rule step_0_X_cross_disorder_centroid:
+    """Gate 0-X: cross-disorder centroid projection (Emory vs GSE98793 TRD)."""
+    output:
+        results   = "analysis/2026-05-17-phase-0/0-X/gate_0X_centroids.json",
+        genes     = "analysis/2026-05-17-phase-0/0-X/gate_0X_genes_used.csv",
+        fig_png   = "analysis/2026-05-17-phase-0/0-X/gate_0X_centroid_projection.png",
+    log:
+        "analysis/2026-05-17-phase-0/0-X/gate_0X.log",
+    conda:
+        "../envs/python-scientific.yaml"
+    shell:
+        "python scripts/01_phase0_gate_X.py > {log} 2>&1"
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 stubs
+# ---------------------------------------------------------------------------
 
 rule project_gse98793:
     """Project GSE98793 TRD cohort into trajectory space (stub)."""
