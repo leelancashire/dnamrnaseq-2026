@@ -252,8 +252,18 @@ Test whether Emory non-responder centroid is closer to a TRD-inflammatory centro
 
 - Emory baseline RNA-seq log-CPM matrix (PRE-IOP samples only), paired-subject subset.
 - pData2 Response column (R / NR / partial) to label Emory samples.
-- GSE98793 expression matrix (whole-blood microarray, 192 MDD + 64 controls) downloaded via `GEOquery` or NCBI FTP. If not yet locally available, this step blocks on that download. Confirm `config.yaml` has `data.external.gse98793` set.
-- TRD-inflammatory subset definition: GSE98793 MDD samples with `non-responder` antidepressant status as labelled in the GSE supplementary, plus high-inflammation marker (CRP or NLR if available; else top-quartile of an inflammation-gene-set GSVA score on the GSE expression matrix).
+- GSE98793 expression matrix (whole-blood Affymetrix GPL570 microarray, 192 samples:
+  128 MDD CASE + 64 CNTL). **Automatically downloaded via `python scripts/download_external.py`**
+  (GEOparse 2.0.4 from NCBI GEO FTP, cached in `data/external/`, MD5-verified).
+  Probe-to-gene rollup (max-mean, committed reference at
+  `src/dnamrnaseq2026/external_projection/resources/hgu133plus2_probe_to_gene.csv`)
+  produces a 22,880-gene x 192-sample matrix.
+  Manual fallback: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE98793
+- TRD-inflammatory subset definition (Phase 0 proxy): all 128 MDD CASE samples.
+  Phase 3.3 refinement: top-quartile of an inflammation-gene-set GSVA score.
+  Note: GSE98793 metadata does NOT include antidepressant-response labels;
+  the ANALYSIS_PLAN v2.2 reference to "non-responder MDD" was incorrect --
+  the dataset has CASE vs CNTL only.
 
 ### Method
 

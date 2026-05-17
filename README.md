@@ -16,13 +16,15 @@ real Emory + BEST data. Phase 1 (cell-type correction, CellDMC) can proceed.
 | 0-T: Trajectory visibility (PCA, Emory) | **MARGINAL** | PERMANOVA p=0.111, max d=0.267 |
 | 0-C: EpiDISH validation (Emory) | **PASS** | abs(r(dMono,dN2LR))=0.354, p<0.0001 |
 | 0-S: Source-domain shift (Emory vs BEST) | **PASS** | max AUC=0.317 (RF) |
-| 0-X: Cross-disorder projection (Emory vs GSE98793) | **BLOCKED** | GSE98793 not downloaded |
+| 0-X: Cross-disorder projection (Emory vs GSE98793) | **MARGINAL** | p=0.112, direction correct (NR closer to MDD) |
 
 Full results: `analysis/2026-05-17-phase-0/<gate>/results.md` per gate.
 
 **0-T MARGINAL action**: proceed to Phase 1 with cell-type correction (CellDMC).
 Reassess 0-T after cell-type-corrected delta matrices are available.
-**0-X action**: download GSE98793 and re-run `python scripts/01_phase0_gate_X.py`.
+**0-X MARGINAL**: direction correct (NR centroid closer to MDD), p=0.112. Phase 3.3
+cross-disorder figure can be built; document the marginal result honestly.
+Phase 3 refinement: replace all-MDD TRD proxy with GSVA high-inflammation subset.
 
 ---
 
@@ -55,6 +57,13 @@ cp config.yaml.example config.yaml
 
 # 5. Verify data access (Day-0 verification)
 python scripts/00_load_data.py
+
+# 6. Download external cohort data (GSE98793 from NCBI GEO, ~104 MB, cached)
+python scripts/download_external.py
+# Re-running is a no-op if the cache exists and MD5 matches.
+# Manual fallback if GEO FTP is down: download from
+#   https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE98793
+# and place GSE98793_family.soft.gz in data/external/
 ```
 
 **Expected output from `00_load_data.py`:**
