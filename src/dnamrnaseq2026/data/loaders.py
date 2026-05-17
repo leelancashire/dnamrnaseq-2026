@@ -43,28 +43,47 @@ def _load_rdata_pyreadr(path: Path) -> dict[str, pd.DataFrame]:
     return dict(result)
 
 
+def _rdata_squeeze_dataframe_constructor(
+    obj: dict[str, object],
+    attrs: dict[str, object],
+) -> pd.DataFrame:
+    """Custom rdata DataFrame constructor that squeezes (N,1) ndarray columns.
+
+    Bioconductor pData2 files (emory_pData2.RData, best_pData2.RData) contain
+    some columns stored as (N,1) 2-D arrays in R. rdata 1.0.0's default
+    constructor passes these directly to pd.DataFrame, which raises ValueError
+    ("Data must be 1-dimensional, got ndarray of shape (N,1)"). This constructor
+    squeezes such columns before building the DataFrame.
+    """
+    import numpy as np  # type: ignore[import-untyped]
+
+    squeezed: dict[str, object] = {}
+    for k, v in obj.items():
+        if isinstance(v, np.ndarray) and v.ndim == 2 and v.shape[1] == 1:
+            squeezed[k] = v.squeeze(axis=1)
+        else:
+            squeezed[k] = v
+
+    index = attrs.get("row.names", None) if attrs else None
+    return pd.DataFrame(squeezed, index=index)
+
+
 def _load_rdata_rdata(path: Path, object_name: str) -> pd.DataFrame:
     """Load a named object from an RData file via the rdata package.
 
-    Handles the ndarray-of-shape-(N,1) bug in rdata's DataFrame constructor
-    by squeezing (N,1) column arrays to 1-D before constructing the DataFrame.
+    Uses a custom DataFrame constructor (_rdata_squeeze_dataframe_constructor)
+    to handle the ndarray-(N,1) column issue in pData2 files from
+    minfi/Bioconductor pipelines.
     """
-    import rdata  # type: ignore[import-untyped]
     import numpy as np  # type: ignore[import-untyped]
+    import rdata  # type: ignore[import-untyped]
 
     parsed = rdata.parser.parse_file(str(path))
 
-    # Use a custom converter to intercept the ndarray-(N,1) DataFrame failure.
-    # The default conversion raises ValueError for columns stored as 2-D arrays
-    # in R (e.g. pData2 files from minfi/Bioconductor pipelines).
-    try:
-        converted = rdata.conversion.convert(parsed)
-    except ValueError as e:
-        if "1-dimensional" in str(e):
-            # Fall back to a raw dict-level repair: re-parse and squeeze arrays.
-            converted = _rdata_convert_squeeze(path, object_name)
-        else:
-            raise
+    converter = rdata.conversion.SimpleConverter(
+        constructor_dict={"data.frame": _rdata_squeeze_dataframe_constructor}
+    )
+    converted = converter.convert(parsed)
 
     if object_name not in converted:
         available = list(converted.keys())
@@ -81,70 +100,6 @@ def _load_rdata_rdata(path: Path, object_name: str) -> pd.DataFrame:
     raise TypeError(
         f"Object '{object_name}' loaded as {type(obj).__name__}, expected DataFrame."
     )
-
-
-def _rdata_convert_squeeze(path: Path, object_name: str) -> dict[str, pd.DataFrame]:
-    """Fallback for rdata files with ndarray-(N,1) columns.
-
-    Parses the R object manually, squeezes all (N,1) numpy arrays to 1-D,
-    then builds a DataFrame column-by-column.
-    """
-    import numpy as np  # type: ignore[import-untyped]
-    import rdata  # type: ignore[import-untyped]
-
-    parsed = rdata.parser.parse_file(str(path))
-
-    # Walk the parsed structure to find the target object.
-    # parsed is an RData container; its value is a tagged list of objects.
-    # We use convert() with a custom class that handles ndarray columns.
-    class SqueezeConverter(rdata.conversion.SimpleConverter):  # type: ignore[misc]
-        def _array_constructor(  # type: ignore[override]
-            self, value: object, attrs: object
-        ) -> object:
-            result = super()._array_constructor(value, attrs)  # type: ignore[misc]
-            if isinstance(result, np.ndarray) and result.ndim == 2 and result.shape[1] == 1:
-                return result.squeeze(axis=1)
-            return result
-
-    try:
-        converted = SqueezeConverter().convert(parsed)
-        return {k: v for k, v in converted.items() if isinstance(v, pd.DataFrame)}
-    except Exception:
-        # Last-resort: use rdata internal R-object access and build manually
-        return _rdata_manual_parse(path, object_name)
-
-
-def _rdata_manual_parse(path: Path, object_name: str) -> dict[str, pd.DataFrame]:
-    """Last-resort RData parser: builds DataFrame column-by-column, squeezing arrays."""
-    import numpy as np  # type: ignore[import-untyped]
-    import rdata  # type: ignore[import-untyped]
-
-    parsed = rdata.parser.parse_file(str(path))
-    # Traverse the RData structure manually
-    r_obj = parsed.object
-    # r_obj is typically a pairlist; find the named element
-    result: dict[str, pd.DataFrame] = {}
-
-    def _squeeze(arr: object) -> object:
-        if isinstance(arr, np.ndarray) and arr.ndim == 2 and arr.shape[1] == 1:
-            return arr.squeeze(axis=1)
-        return arr
-
-    # For a data.frame-like object, attributes include 'names' and 'row.names'
-    if hasattr(r_obj, "value") and hasattr(r_obj, "attributes"):
-        attrs = r_obj.attributes
-        if attrs and "names" in attrs:
-            col_names = list(attrs["names"].value)
-            columns_data = {}
-            for i, col in enumerate(col_names):
-                raw = r_obj.value[i] if hasattr(r_obj, "value") else None
-                if raw is not None and hasattr(raw, "value"):
-                    val = np.array(raw.value)
-                    columns_data[col] = _squeeze(val)
-            if columns_data:
-                result[object_name] = pd.DataFrame(columns_data)
-
-    return result
 
 
 def _load_rdata(
