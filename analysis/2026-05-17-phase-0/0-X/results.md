@@ -1,41 +1,60 @@
-# Gate 0-X: Cross-disorder centroid projection (Emory vs GSE98793 TRD)
+# Gate 0-X results: cross-disorder centroid projection
 
-**Date:** 2026-05-17
-**Verdict: BLOCKED**
+**Date:** 2026-05-17 (downloader + real run)
+**Seed:** 42
+**Verdict: MARGINAL**
+
+## Quantitative findings
+
+| Metric | Value |
+|--------|-------|
+| d(Emory NR, GSE MDD) | 70.5815 |
+| d(Emory R, GSE MDD) | 71.1164 |
+| Observed delta (NR - R) | -0.5349 |
+| Direction correct (NR closer to MDD) | True |
+| Permutation p (one-tailed, B=2000, seed=42) | 0.1115 |
+| Genes in common space | 2000 |
+| Gene intersection pre-filter | 13,192 |
 
 ## Method
 
-Cross-disorder centroid projection comparing Emory NR/R delta-vectors against
-GSE98793 (Affymetrix microarray, treatment-resistant depression cohort). Top-2000-gene
-shared space, quantile normalisation across platforms, Euclidean centroid distances,
-permutation test (n_perm=2000, seed=42).
+- GSE98793: 192 whole-blood Affymetrix GPL570 samples (128 MDD CASE, 64 CNTL).
+  Downloaded via GEOparse 2.0.4 from NCBI GEO FTP.
+- Probe-to-gene rollup: max-mean strategy, committed reference annotation
+  (src/dnamrnaseq2026/external_projection/resources/hgu133plus2_probe_to_gene.csv).
+  54,675 probes to 22,880 gene symbols.
+- Emory RNA-seq: 176 PRE-IOP samples (112 R, 64 NR). GENCODE Ensembl IDs
+  reindexed to gene symbols (19,349 unique after duplicate collapse).
+- Harmonisation: gene-symbol intersection (13,192 genes), quantile normalisation
+  across combined 368-sample matrix.
+- Variance filter to top 2,000 genes by combined-cohort variance.
+- Centroids: Emory R mean, Emory NR mean, GSE MDD mean (all 128 CASE samples).
+- Permutation test: B=2000 permutations of Emory R/NR labels.
 
-Expected signal: d(NR_centroid, TRD_centroid) < d(R_centroid, TRD_centroid) with
-permutation p < 0.05.
+## Verdict justification
 
-## Verdict rationale
+MARGINAL: direction correct (NR centroid 0.53 units closer to GSE MDD
+than R centroid) but permutation p=0.111 exceeds the PASS threshold of
+0.05 and falls within the MARGINAL band [0.05, 0.15]. Per ANALYSIS_PLAN.md
+Step 0-X acceptance criteria, MARGINAL allows the Phase 3.3 cross-disorder
+figure to be built with the result documented honestly.
 
-BLOCKED: GSE98793 expression file is not available locally. `config.yaml`
-`data.external.gse98793` is null.
+## Known limitations
 
-Gate 0-X exits gracefully with a BLOCKED result rather than failing. Per
-ANALYSIS_PLAN.md, Gate 0-X tests the hypothesis that Emory NR subjects are
-distributionally closer to TRD subjects than Emory R subjects. This is a pre-Phase-3
-validation, not a hard stop for Phase 1 or Phase 2.
+1. TRD subset: all 128 MDD CASE samples used as TRD proxy. GSE98793 metadata
+   does not include antidepressant response labels. Phase 3.3 should refine
+   with a high-inflammation criterion (top-quartile GSVA score on an
+   inflammation gene set).
+2. Cross-platform harmonisation: quantile normalisation (crude, documented
+   as load-bearing caveat per ANALYSIS_PLAN.md). Phase 3 will apply ComBat
+   or COCONUT for a more principled approach.
+3. Sample size asymmetry: Emory NR n=64 vs R n=112. The permutation test
+   accounts for this, but the smaller NR group increases variance in the
+   centroid estimate.
 
-## Required action
+## Files
 
-To unblock Gate 0-X:
-1. Download GSE98793 from https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE98793
-   (series matrix or normalised expression TSV/CSV, genes as rows).
-2. Set `data.external.gse98793` in `config.yaml` to the local file path.
-3. Re-run: `python scripts/01_phase0_gate_X.py`
-
-## Known issues and limitations
-
-- Heuristic TRD subset: Phase 0 uses the first 50 samples as a TRD proxy. Phase 3
-  requires the full phenotype metadata from the GSE98793 series matrix to define
-  the actual TRD vs healthy subsets.
-- Platform harmonisation: GSE98793 is Affymetrix; Emory is RNA-seq. Quantile
-  normalisation + top-2000-gene intersection is an approximation; platform effects
-  may dominate the centroid distances.
+- `gate_0X_centroids.json` -- full results
+- `gate_0X_genes_used.csv` -- 2000-gene set with Emory R/NR mean expression
+- `gate_0X_centroid_projection.png` -- 2D PCA scatter with centroid markers
+- `gate_0X_centroid_projection.svg`

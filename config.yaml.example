@@ -12,9 +12,16 @@ data:
   # mmVAE supplementary (genes.CpG.z, MetaBase pathways, annEPIC etc.)
   emory_mmvae_dir: "/mnt/d/lee/onedrive/work/nicol healthtech/cvb/dnamrnaseq_mmvae"
 
-  # External cohort paths (populate when downloaded)
+  # External cohort download cache directory.
+  # Supports ~ expansion. If null, defaults to data/external/ inside the repo.
+  # Override to a shared location (e.g. ~/data/external/) to avoid
+  # re-downloading when working across multiple clones.
+  external_data_dir: null   # e.g. "~/data/external" or "/shared/geo_cache"
+
+  # External cohort paths (legacy per-file overrides; prefer external_data_dir).
+  # If external_data_dir is set, these are auto-resolved from it.
   external:
-    gse98793: null           # GSE98793 TRD cohort; set to local TSV path when available
+    gse98793: null           # GSE98793 TRD cohort; auto-resolved from external_data_dir
     gtex: null               # GTEx v8 whole-blood; set to local TSV path when available
     aurora: null             # AURORA cohort; awaiting data access
 

@@ -6,6 +6,9 @@
 *.rda
 *.csv
 *.tsv
+
+# Committed reference annotation CSVs (not data, required for reproducibility)
+!src/dnamrnaseq2026/external_projection/resources/*.csv
 *.npy
 *.npz
 *.h5

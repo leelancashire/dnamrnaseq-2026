@@ -41,6 +41,7 @@ dependencies = [
     "transformers>=4.40",
     "mofapy2>=0.7",
     "pytorch-metric-learning>=2.3",
+    "GEOparse>=2.0",
 ]
 
 [project.optional-dependencies]

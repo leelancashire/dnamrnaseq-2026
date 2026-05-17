@@ -61,6 +61,10 @@ dependencies:
   - snakemake>=8.0
   - snakemake-wrapper-utils>=3.0
 
+  # GEO data download
+  - pip:
+    - GEOparse>=2.0         # reproducible GEO dataset download (GSE98793 for Gate 0-X)
+
   # Dev / QA
   - pytest>=8.0
   - ruff>=0.4

@@ -1,5 +1,27 @@
 {
   "gate": "0-X",
-  "verdict": "BLOCKED",
-  "reason": "GSE98793 expression file not available. Set config.yaml data.external.gse98793 to the local file path."
+  "verdict": "MARGINAL",
+  "n_emory_r": 112,
+  "n_emory_nr": 64,
+  "n_gse_trd": 128,
+  "n_gse_control": 64,
+  "n_genes": 2000,
+  "gene_intersection_pre_filter": 13192,
+  "d_emory_nr_to_gse_trd": 70.58150926756306,
+  "d_emory_r_to_gse_trd": 71.11641538829235,
+  "observed_delta": -0.5349061207292891,
+  "direction_correct": true,
+  "permutation_p": 0.1115,
+  "n_permutations": 2000,
+  "gse98793_info": {
+    "n_probes_total": 54675,
+    "n_probes_annotated": 45782,
+    "n_genes_after_rollup": 22880,
+    "n_samples": 192,
+    "platform": "GPL570 (Affymetrix HG-U133 Plus 2.0)",
+    "trd_subset": "all MDD CASE samples (Phase 0 proxy; Phase 3 refines with GSVA)",
+    "probe_to_gene_rollup": "max_mean"
+  },
+  "harmonisation_note": "Quantile normalisation across cohorts (crude Phase-0 harmonisation). Phase 3 will use ComBat or COCONUT for cross-platform correction. Gene IDs are gene symbols; intersection with Emory RNA-seq gene symbols.",
+  "seed": 42
 }

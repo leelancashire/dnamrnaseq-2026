@@ -5,11 +5,35 @@ Phase 0 Gate 0-X and Phase 4 of the v2.2 analysis plan.
 
 
 # ---------------------------------------------------------------------------
+# External data download
+# ---------------------------------------------------------------------------
+
+rule download_external:
+    """Download all external cohort data (GSE98793 via NCBI GEO).
+
+    Idempotent: re-running is a no-op if the cached file exists and MD5 matches.
+    Manual fallback: if GEO FTP is unavailable, download manually from
+    https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE98793 and place
+    the SOFT file in the cache directory (default: data/external/).
+    """
+    output:
+        touch("data/external/.download_complete"),
+    log:
+        "analysis/2026-05-17-phase-0/0-X/download_external.log",
+    conda:
+        "../envs/python-scientific.yaml"
+    shell:
+        "python scripts/download_external.py > {log} 2>&1"
+
+
+# ---------------------------------------------------------------------------
 # Phase 0: Gate 0-X cross-disorder centroid projection
 # ---------------------------------------------------------------------------
 
 rule step_0_X_cross_disorder_centroid:
-    """Gate 0-X: cross-disorder centroid projection (Emory vs GSE98793 TRD)."""
+    """Gate 0-X: cross-disorder centroid projection (Emory vs GSE98793 MDD)."""
+    input:
+        download_flag = "data/external/.download_complete",
     output:
         results   = "analysis/2026-05-17-phase-0/0-X/gate_0X_centroids.json",
         genes     = "analysis/2026-05-17-phase-0/0-X/gate_0X_genes_used.csv",
