@@ -38,14 +38,14 @@ def main() -> None:
 
     from dnamrnaseq2026.data.loaders import load_emory, load_emory_rnaseq
     from dnamrnaseq2026.preprocessing.cell_type_correction import residualise_on_cell_props
-    from dnamrnaseq2026.preprocessing.delta_construction import filter_paired_ids
+    from dnamrnaseq2026.preprocessing.delta_construction import filter_paired_ids_rna
     from dnamrnaseq2026.preprocessing.rnaseq_differential import (
         run_de_delta,
         run_de_ols,
     )
 
     logger.info("Loading Emory RNA-seq.")
-    log_cpm_df, _ = load_emory_rnaseq()
+    log_cpm_df = load_emory_rnaseq()
     gene_ids = list(log_cpm_df.index)
     log_cpm = log_cpm_df.values.astype(np.float64)
 
@@ -98,16 +98,14 @@ def main() -> None:
     corrected_df.to_parquet(OUT_DIR / "rnaseq_corrected_emory.parquet")
     corrected_df.to_parquet(LATEST_DIR / "rnaseq_corrected_emory.parquet")
 
-    # (c) DELTA DE
-    paired_subjects, pre_ids, post_ids = filter_paired_ids(pdata_aug)
-
-    # Simplified positional pairing: take matched positions
-    pre_in_rna = [s for s in pre_ids if s in log_cpm_df.columns]
-    post_in_rna = [s for s in post_ids if s in log_cpm_df.columns]
+    # (c) DELTA DE: pair using RNA-seq sample IDs from pdata_aug index
+    paired_rna, pre_in_rna, post_in_rna = filter_paired_ids_rna(pdata_aug)
+    pre_in_rna = [s for s in pre_in_rna if s in log_cpm_df.columns]
+    post_in_rna = [s for s in post_in_rna if s in log_cpm_df.columns]
     n_pairs = min(len(pre_in_rna), len(post_in_rna))
     pre_in_rna = pre_in_rna[:n_pairs]
     post_in_rna = post_in_rna[:n_pairs]
-    paired_rna = [f"SUBJ_{i}" for i in range(n_pairs)]
+    paired_rna = list(paired_rna[:n_pairs])
 
     pre_col_pos = [list(log_cpm_df.columns).index(s) for s in pre_in_rna]
     post_col_pos = [list(log_cpm_df.columns).index(s) for s in post_in_rna]

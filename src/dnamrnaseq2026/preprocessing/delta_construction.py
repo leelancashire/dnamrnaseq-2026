@@ -421,6 +421,65 @@ def filter_paired_ids(
     return paired_subjects, pre_ids, post_ids
 
 
+def filter_paired_ids_rna(
+    subject_data: pd.DataFrame,
+    pre_label: str = "PRE-IOP",
+    post_label: str = "POST-IOP",
+    subcode_col: str = "Subcode",
+    visit_col: str = "Visit",
+) -> tuple[list[str], list[str], list[str]]:
+    """Return (paired_subjects, pre_sample_ids, post_sample_ids) using index.
+
+    Like filter_paired_ids but uses the DataFrame index as sample ID rather
+    than a dedicated SampleName column. Correct for RNA-seq alignment where
+    the index is already the {Subcode}-{Visit} sample identifier.
+
+    Returns
+    -------
+    tuple of (paired_subjects, pre_index_ids, post_index_ids)
+    """
+    if visit_col not in subject_data.columns or subcode_col not in subject_data.columns:
+        logger.warning(
+            "filter_paired_ids_rna: missing %s or %s columns; returning empty.",
+            visit_col,
+            subcode_col,
+        )
+        return [], [], []
+
+    pre_mask = subject_data[visit_col].astype(str) == pre_label
+    post_mask = subject_data[visit_col].astype(str) == post_label
+    pre_df = subject_data[pre_mask]
+    post_df = subject_data[post_mask]
+
+    pre_subcodes = set(pre_df[subcode_col].astype(str))
+    post_subcodes = set(post_df[subcode_col].astype(str))
+    common = sorted(pre_subcodes & post_subcodes)
+
+    pre_by_subcode: dict[str, str] = {
+        str(row[subcode_col]): idx for idx, row in pre_df.iterrows()
+    }
+    post_by_subcode: dict[str, str] = {
+        str(row[subcode_col]): idx for idx, row in post_df.iterrows()
+    }
+
+    paired_subjects: list[str] = []
+    pre_ids: list[str] = []
+    post_ids: list[str] = []
+    for sc in common:
+        if sc in pre_by_subcode and sc in post_by_subcode:
+            paired_subjects.append(sc)
+            pre_ids.append(pre_by_subcode[sc])
+            post_ids.append(post_by_subcode[sc])
+
+    logger.info(
+        "filter_paired_ids_rna: %d paired subjects (%s vs %s).",
+        len(paired_subjects),
+        pre_label,
+        post_label,
+    )
+    return paired_subjects, pre_ids, post_ids
+
+
 def build_paired_delta(
     feature_matrix: np.ndarray[Any, np.dtype[np.float64]],
     feature_ids: list[str],

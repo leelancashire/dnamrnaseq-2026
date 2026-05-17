@@ -36,7 +36,7 @@ def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     from dnamrnaseq2026.data.loaders import load_emory, load_emory_rnaseq
-    from dnamrnaseq2026.preprocessing.delta_construction import filter_paired_ids
+    from dnamrnaseq2026.preprocessing.delta_construction import filter_paired_ids_rna
     from dnamrnaseq2026.preprocessing.pathway_activity import (
         compute_delta_activity,
         get_progeny_net,
@@ -47,7 +47,7 @@ def main() -> None:
     )
 
     logger.info("Loading Emory RNA-seq.")
-    log_cpm_df, _ = load_emory_rnaseq()
+    log_cpm_df = load_emory_rnaseq()
     gene_ids = list(log_cpm_df.index)
     log_cpm = log_cpm_df.values.astype(np.float64)
     sample_ids = list(log_cpm_df.columns)
@@ -94,13 +94,13 @@ def main() -> None:
     logger.info("GSVA activity: %s", gsva_activity.shape)
 
     # --- Paired delta ---
-    paired_subjects, pre_ids, post_ids = filter_paired_ids(pdata_aug)
+    paired_subjects, pre_ids, post_ids = filter_paired_ids_rna(pdata_aug)
     pre_in_rna = [s for s in pre_ids if s in shared_samples]
     post_in_rna = [s for s in post_ids if s in shared_samples]
     n_pairs = min(len(pre_in_rna), len(post_in_rna))
     pre_in_rna = pre_in_rna[:n_pairs]
     post_in_rna = post_in_rna[:n_pairs]
-    paired_rna = [f"SUBJ_{i}" for i in range(n_pairs)]
+    paired_rna = list(paired_subjects[:n_pairs])
 
     logger.info("Computing delta pathway activity (%d pairs).", n_pairs)
     progeny_delta = compute_delta_activity(progeny_activity, pre_in_rna, post_in_rna, paired_rna)

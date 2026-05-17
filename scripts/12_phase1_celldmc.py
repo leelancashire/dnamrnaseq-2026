@@ -156,7 +156,7 @@ def main() -> None:
     # Rescue check 1.2.5
     logger.info("Running rescue check 1.2.5.")
     try:
-        log_cpm, _ = load_emory_rnaseq()
+        log_cpm = load_emory_rnaseq()
         gene_ids = list(log_cpm.index)
         rna_matrix = log_cpm.values.astype(np.float64)
 

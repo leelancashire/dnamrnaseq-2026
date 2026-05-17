@@ -98,6 +98,12 @@ def make_cell_frac_pc1(cell_fracs: pd.DataFrame, sample_ids: list[str]) -> np.nd
         logger.warning("Fewer than 2 cell-type columns for PC1; returning zeros.")
         return np.zeros(len(sample_ids))
     cf_vals = cf[available_cols].fillna(0.0).values
+    # Guard: if all-zero or constant (e.g. rpy2 fallback), return zeros
+    if cf_vals.shape[0] == 0 or np.allclose(cf_vals, 0.0) or np.all(cf_vals == cf_vals[0]):
+        logger.warning(
+            "Cell fraction matrix is constant or empty; returning zeros for PC1."
+        )
+        return np.zeros(len(sample_ids))
     scaler = StandardScaler()
     cf_scaled = scaler.fit_transform(cf_vals)
     pca = PCA(n_components=1)
