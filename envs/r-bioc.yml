@@ -1,0 +1,33 @@
+name: dnamrnaseq-r-bioc
+# R + Bioconductor 3.18 environment for Phase 1 CellDMC and EpiDISH rules.
+# Snakemake --use-conda rules that need R-side Bioconductor packages use this env.
+# Pin Bioconductor 3.18 (compatible with R 4.3).
+
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  - python=3.11
+  - r-base=4.3
+  - rpy2>=3.5
+
+  # Bioconductor packages
+  - bioconductor-epidish>=2.16     # EpiDISH + CellDMC
+  - bioconductor-limma>=3.56       # limma-voom DE
+  - bioconductor-edger>=4.0        # filterByExpr, TMM normalisation
+  - bioconductor-minfi>=1.44       # DNAm utilities (array annotation)
+
+  # CRAN R packages
+  - r-matrix>=1.6
+  - r-biocmanager>=1.30
+
+  # Python packages needed by the Snakemake script wrappers
+  - pandas>=2.0
+  - numpy>=1.26
+  - scipy>=1.11
+  - statsmodels>=0.14
+  - pyreadr>=0.5
+  - rdata>=0.10
+  - pyyaml>=6.0
