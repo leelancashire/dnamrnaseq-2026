@@ -1,0 +1,29 @@
+# config.yaml.example
+# Copy to config.yaml and edit paths for your local machine.
+# config.yaml is gitignored. config.yaml.example is committed.
+#
+# Default paths assume Lee's WSL2 OneDrive mount.
+# Adjust data.emory_dnam_dir and data.emory_mmvae_dir for your setup.
+
+data:
+  # Primary DNAm + pData files (bVals, pData2, bVals.trans, subject.data)
+  emory_dnam_dir: "/mnt/d/lee/onedrive/work/nicol healthtech/cvb/emory-dnam"
+
+  # mmVAE supplementary (genes.CpG.z, MetaBase pathways, annEPIC etc.)
+  emory_mmvae_dir: "/mnt/d/lee/onedrive/work/nicol healthtech/cvb/dnamrnaseq_mmvae"
+
+  # External cohort paths (populate when downloaded)
+  external:
+    gse98793: null           # GSE98793 TRD cohort; set to local TSV path when available
+    gtex: null               # GTEx v8 whole-blood; set to local TSV path when available
+    aurora: null             # AURORA cohort; awaiting data access
+
+run:
+  seed: 42
+  embedding_seeds: [42, 43, 44, 45, 46, 47, 48, 49, 50, 51]
+  conformal_alpha: 0.10
+  n_jobs: 4                  # parallel workers for sklearn / snakemake rules
+
+logging:
+  level: INFO
+  file: null                 # set to a path to write logs to file; null = stdout only

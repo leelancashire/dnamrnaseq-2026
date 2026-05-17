@@ -1,0 +1,94 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dnamrnaseq2026"
+version = "0.1.0"
+description = "Treatment-response trajectory atlas for PTSD multi-omics (DNAm + RNA-seq)"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.11"
+authors = [
+    {name = "Lee Lancashire", email = "lee.lancashire@everycure.org"}
+]
+keywords = [
+    "ptsd", "dna-methylation", "rna-seq", "multi-omics", "trajectory-atlas",
+    "treatment-response", "conformal-prediction", "embedding"
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "scikit-learn>=1.4",
+    "statsmodels>=0.14",
+    "pingouin>=0.5",
+    "pyreadr>=0.5",
+    "rdata>=0.10",
+    "pyyaml>=6.0",
+    "matplotlib>=3.8",
+    "seaborn>=0.13",
+    "plotly>=5.18",
+    "mapie>=0.8",
+    "torch>=2.2",
+    "transformers>=4.40",
+    "mofapy2>=0.7",
+    "pytorch-metric-learning>=2.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "mypy>=1.9",
+    "pre-commit>=3.7",
+    "nbstripout>=0.7",
+]
+
+[project.scripts]
+dnamrnaseq-load = "dnamrnaseq2026.data.loaders:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "ANN", "B", "C4", "SIM"]
+ignore = [
+    "ANN101",  # missing type annotation for self
+    "ANN102",  # missing type annotation for cls
+    "ANN401",  # dynamically typed expressions (Any)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN", "S"]
+"scripts/*" = ["ANN", "T201"]  # allow print in scripts
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = ["tests/", "scripts/", "notebooks/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]

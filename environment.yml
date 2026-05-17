@@ -1,0 +1,70 @@
+name: dnamrnaseq2026
+channels:
+  - conda-forge
+  - bioconda
+  - pytorch
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+
+  # Core scientific stack
+  - pandas>=2.0
+  - numpy>=1.26
+  - scipy>=1.11
+  - scikit-learn>=1.4
+  - statsmodels>=0.14
+  - pingouin>=0.5
+  - lifelines>=0.27
+
+  # RData / R interop
+  - pyreadr>=0.5          # primary RData loader (rpy2-free path)
+  - rdata>=0.10           # fallback for S4 objects
+
+  # R bridge (EpiDISH, CellDMC, HIMA all require R packages)
+  - rpy2>=3.5
+
+  # R base + Bioconductor packages via conda-forge/bioconda
+  - r-base=4.3
+  - bioconductor-epidish>=2.16
+  - bioconductor-limma>=3.56
+  - r-hima>=2.0
+
+  # PyTorch (CPU baseline; GPU-specific install handled separately)
+  - pytorch>=2.2
+  - cpuonly   # remove this line and install GPU torch separately on GPU machines
+
+  # Transformers (Geneformer, scGPT)
+  - transformers>=4.40
+  - accelerate>=0.34
+  - sentencepiece>=0.2
+
+  # MOFA+ for multi-omics factor analysis
+  - mofapy2>=0.7
+
+  # Contrastive learning losses
+  - pytorch-metric-learning>=2.3
+
+  # Conformal prediction
+  - pip:
+    - mapie>=0.8
+    - crepes>=0.6
+    - geneformer       # pip install from HuggingFace; pin to a tag when stable
+
+  # Viz
+  - matplotlib>=3.8
+  - seaborn>=0.13
+  - plotly>=5.18
+  - datashader>=0.16   # trajectory atlas with many subjects
+
+  # Pipeline orchestration
+  - snakemake>=8.0
+  - snakemake-wrapper-utils>=3.0
+
+  # Dev / QA
+  - pytest>=8.0
+  - ruff>=0.4
+  - mypy>=1.9
+  - pre-commit>=3.7
+  - nbstripout>=0.7
+  - pyyaml>=6.0

@@ -1,0 +1,68 @@
+# Data files — never commit
+# Note: /data/ at repo root only, not src/*/data/ subpackages
+/data/
+/models/
+*.RData
+*.rda
+*.csv
+*.tsv
+*.npy
+*.npz
+*.h5
+*.parquet
+analysis/*/outputs/
+
+# Config overrides
+config.yaml
+config.local.yaml
+.env
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+dist/
+build/
+
+# Conda
+.conda/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+Thumbs.db
+
+# HuggingFace / model weights
+.cache/
+huggingface/
+
+# Snakemake
+.snakemake/
+logs/
+slurm-*.out
+
+# Analysis run outputs (keep directory structure, ignore heavy outputs)
+analysis/*/outputs/
+analysis/*/*.log
+analysis/*/*.parquet
+analysis/*/*.npy
+analysis/*/*.npz
