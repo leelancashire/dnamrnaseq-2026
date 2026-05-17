@@ -1,6 +1,7 @@
 # Data files — never commit
-data/
-models/
+# Note: /data/ at repo root only, not src/*/data/ subpackages
+/data/
+/models/
 *.RData
 *.rda
 *.csv
