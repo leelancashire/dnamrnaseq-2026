@@ -1,0 +1,5 @@
+{
+  "gate": "0-X",
+  "verdict": "BLOCKED",
+  "reason": "GSE98793 expression file not available. Set config.yaml data.external.gse98793 to the local file path."
+}

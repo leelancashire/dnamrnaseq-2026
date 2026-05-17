@@ -66,3 +66,6 @@ analysis/*/*.log
 analysis/*/*.parquet
 analysis/*/*.npy
 analysis/*/*.npz
+# Phase 0 gate figures (PNG/SVG are gitignored; results.md and JSON are committed)
+analysis/**/*.png
+analysis/**/*.svg
