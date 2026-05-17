@@ -49,6 +49,7 @@ def main() -> None:
     from dnamrnaseq2026.preprocessing.delta_construction import (
         build_paired_delta,
         filter_paired_ids,
+        filter_paired_ids_rna,
     )
 
     logger.info("Loading Emory data.")
@@ -130,23 +131,39 @@ def main() -> None:
 
     # --- (c) Delta contrast ---
     logger.info("Building paired delta for delta contrast.")
-    paired_subjects, pre_ids, post_ids = filter_paired_ids(pdata_aug)
+    # filter_paired_ids returns DNAm SentrixIDs for M-matrix subsetting
+    paired_subjects, pre_ids_dnam, post_ids_dnam = filter_paired_ids(pdata_aug)
     logger.info("Paired subjects: %d.", len(paired_subjects))
 
     delta_m, _ = build_paired_delta(
         m_matrix,
         cpg_ids,
-        pre_ids,
-        post_ids,
-        list(pdata_aug.index),
+        pre_ids_dnam,
+        post_ids_dnam,
+        list(bvals_df.columns),  # M-matrix columns are bvals SentrixIDs
     )
-    delta_cell_props = cell_props.loc[post_ids].values - cell_props.loc[pre_ids].values
+    # For cell_props (indexed by AMC-IDs), use RNA-based pairing
+    _, pre_ids_rna, post_ids_rna = filter_paired_ids_rna(pdata_aug)
+    # Only keep pairs where RNA IDs are in cell_props index
+    valid_rna = [
+        (sc, p, q) for sc, p, q in zip(paired_subjects, pre_ids_rna, post_ids_rna, strict=False)
+        if p in cell_props.index and q in cell_props.index
+    ]
+    if valid_rna:
+        _sc_rna, pre_ids_rna_filt, post_ids_rna_filt = zip(*valid_rna, strict=False)
+        delta_cell_props = (
+            cell_props.loc[list(post_ids_rna_filt)].values
+            - cell_props.loc[list(pre_ids_rna_filt)].values
+        )
+    else:
+        from dnamrnaseq2026.preprocessing.cell_type_correction import CELL_TYPE_COLS as _CT
+        delta_cell_props = np.zeros((len(paired_subjects), len(_CT)))
     delta_cell_props_df = pd.DataFrame(
         delta_cell_props,
         index=paired_subjects,
         columns=cell_props.columns,
     )
-    pdata_paired = pdata_aug.loc[pre_ids].copy()
+    pdata_paired = pdata_aug.loc[pre_ids_rna[:len(paired_subjects)]].copy()
     pdata_paired.index = pd.Index(paired_subjects)
 
     logger.info("Running CellDMC DELTA contrast (%d paired subjects).", len(paired_subjects))
@@ -178,9 +195,12 @@ def main() -> None:
             delta_m, delta_cell_props_df, paired_subjects
         )
         idx = list(pdata_aug.index)
+        # Use RNA-based IDs for RNA-seq delta
+        _pre_rna = pre_ids_rna[:len(paired_subjects)]
+        _post_rna = post_ids_rna[:len(paired_subjects)]
         delta_rna = (
-            rna_matrix[:, [idx.index(s) for s in post_ids]]
-            - rna_matrix[:, [idx.index(s) for s in pre_ids]]
+            rna_matrix[:, [idx.index(s) for s in _post_rna]]
+            - rna_matrix[:, [idx.index(s) for s in _pre_rna]]
         )
         corrected_delta_rna = residualise_on_cell_props(
             delta_rna, delta_cell_props_df, paired_subjects
