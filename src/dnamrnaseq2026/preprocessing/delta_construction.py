@@ -328,3 +328,140 @@ def build_joint_delta_matrix(
         logger.info("  Scaled (zero mean, unit variance) per feature.")
 
     return joint
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 compatibility shims
+# ---------------------------------------------------------------------------
+
+
+def filter_paired_ids(
+    subject_data: pd.DataFrame,
+    pre_label: str = "PRE-IOP",
+    post_label: str = "POST-IOP",
+    subcode_col: str = "Subcode",
+    visit_col: str = "Visit",
+    dnam_sample_col: str = "SampleName_DNAm",
+    rna_sample_col: str = "SampleName_RNASeq",
+) -> tuple[list[str], list[str], list[str]]:
+    """Return (paired_subjects, pre_sample_ids, post_sample_ids).
+
+    Compatibility shim for Phase 1 scripts. Wraps ``identify_paired_subjects``
+    and returns parallel lists of subject codes and their PRE/POST sample IDs
+    for use in matrix subsetting.
+
+    Parameters
+    ----------
+    subject_data:
+        Subject metadata DataFrame. Must contain subcode_col, visit_col,
+        and dnam_sample_col (or rna_sample_col) columns.
+    pre_label, post_label:
+        Visit labels for PRE and POST respectively.
+    subcode_col, visit_col, dnam_sample_col, rna_sample_col:
+        Column names in subject_data.
+
+    Returns
+    -------
+    tuple of (paired_subjects, pre_sample_ids, post_sample_ids)
+        - paired_subjects: list of subject Subcode strings
+        - pre_sample_ids: list of PRE sample IDs (dnam_sample_col or index)
+        - post_sample_ids: list of POST sample IDs (matching order)
+    """
+    # Resolve sample ID column: prefer dnam_sample_col if present
+    sample_col = dnam_sample_col if dnam_sample_col in subject_data.columns else None
+    if sample_col is None and visit_col in subject_data.columns:
+        # Fall back to index-based IDs
+        sample_col = None
+
+    if visit_col in subject_data.columns:
+        pre_mask = subject_data[visit_col].astype(str) == pre_label
+        post_mask = subject_data[visit_col].astype(str) == post_label
+    else:
+        pre_mask = pd.Series(False, index=subject_data.index)
+        post_mask = pd.Series(False, index=subject_data.index)
+
+    pre_df = subject_data[pre_mask]
+    post_df = subject_data[post_mask]
+
+    if subcode_col in subject_data.columns:
+        pre_subcodes = set(pre_df[subcode_col].astype(str))
+        post_subcodes = set(post_df[subcode_col].astype(str))
+        paired_subcodes = sorted(pre_subcodes & post_subcodes)
+    else:
+        paired_subcodes = []
+
+    pre_rows = (
+        pre_df[pre_df[subcode_col].astype(str).isin(paired_subcodes)].set_index(subcode_col)
+    )
+    post_rows = (
+        post_df[post_df[subcode_col].astype(str).isin(paired_subcodes)].set_index(subcode_col)
+    )
+
+    pre_ids: list[str] = []
+    post_ids: list[str] = []
+    paired_subjects: list[str] = []
+
+    for sc in paired_subcodes:
+        if sc not in pre_rows.index or sc not in post_rows.index:
+            continue
+        if sample_col and sample_col in pre_rows.columns:
+            pre_id = str(pre_rows.loc[sc, sample_col])
+            post_id = str(post_rows.loc[sc, sample_col])
+        else:
+            pre_id = str(pre_rows.index[pre_rows.index.get_loc(sc)])
+            post_id = str(post_rows.index[post_rows.index.get_loc(sc)])
+        paired_subjects.append(sc)
+        pre_ids.append(pre_id)
+        post_ids.append(post_id)
+
+    logger.info(
+        "filter_paired_ids: %d paired subjects (%s vs %s).",
+        len(paired_subjects), pre_label, post_label,
+    )
+    return paired_subjects, pre_ids, post_ids
+
+
+def build_paired_delta(
+    feature_matrix: np.ndarray[Any, np.dtype[np.float64]],
+    feature_ids: list[str],
+    pre_ids: list[str],
+    post_ids: list[str],
+    sample_ids: list[str],
+) -> tuple[np.ndarray[Any, np.dtype[np.float64]], list[str]]:
+    """Build a paired POST-PRE delta matrix from a feature matrix.
+
+    Parameters
+    ----------
+    feature_matrix:
+        Shape (n_features, n_samples). Columns match sample_ids ordering.
+    feature_ids:
+        Feature identifier list (length n_features).
+    pre_ids, post_ids:
+        Parallel lists of PRE and POST sample IDs (from filter_paired_ids).
+    sample_ids:
+        Ordered list of all sample IDs matching feature_matrix columns.
+
+    Returns
+    -------
+    tuple of (delta_matrix, kept_feature_ids)
+        delta_matrix: shape (n_features, n_pairs)
+        kept_feature_ids: same as feature_ids (all retained)
+    """
+    sample_idx = {s: i for i, s in enumerate(sample_ids)}
+    valid_pairs = [
+        (p, q)
+        for p, q in zip(pre_ids, post_ids, strict=False)
+        if p in sample_idx and q in sample_idx
+    ]
+    if not valid_pairs:
+        empty: np.ndarray[Any, np.dtype[np.float64]] = np.empty(
+            (len(feature_ids), 0), dtype=np.float64
+        )
+        return empty, feature_ids
+    pre_pos = [sample_idx[p] for p, _ in valid_pairs]
+    post_pos = [sample_idx[q] for _, q in valid_pairs]
+    delta: np.ndarray[Any, np.dtype[np.float64]] = (
+        feature_matrix[:, post_pos] - feature_matrix[:, pre_pos]
+    )
+    logger.info("build_paired_delta: %d features x %d pairs.", delta.shape[0], delta.shape[1])
+    return delta, feature_ids
