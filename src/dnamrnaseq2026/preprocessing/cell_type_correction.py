@@ -526,34 +526,42 @@ def annotate_cross_contrast(
     pd.DataFrame
         Columns: cpg, cell_type, cross_contrast_class.
     """
-    rows = []
-    all_cpgs = set(celldmc_delta["cpg"].unique())
+    # Vectorised implementation: set a boolean sig flag per (cpg, cell_type) key
+    # then merge across contrasts.  The row-wise lookup approach is O(N^2) and
+    # intractable for 292k CpGs.
+    def _sig_flags(df: pd.DataFrame, suffix: str) -> pd.DataFrame:
+        """Return boolean sig column keyed on (cpg, cell_type)."""
+        tmp = df[["cpg", "cell_type", "q_interaction"]].copy()
+        tmp[f"sig_{suffix}"] = tmp["q_interaction"].fillna(1.0) < fdr_threshold
+        return tmp[["cpg", "cell_type", f"sig_{suffix}"]].drop_duplicates(
+            subset=["cpg", "cell_type"]
+        )
 
-    def _is_sig(df: pd.DataFrame, cpg: str, ct: str) -> bool:
-        sub = df[(df["cpg"] == cpg) & (df["cell_type"] == ct)]
-        if sub.empty:
-            return False
-        q = sub["q_interaction"].values[0]
-        return bool(not np.isnan(q) and q < fdr_threshold)
+    pre_flags = _sig_flags(celldmc_pre, "pre")
+    post_flags = _sig_flags(celldmc_post, "post")
+    delta_flags = _sig_flags(celldmc_delta, "delta")
 
-    for cpg in all_cpgs:
-        for ct in CELL_TYPE_COLS:
-            in_pre = _is_sig(celldmc_pre, cpg, ct)
-            in_post = _is_sig(celldmc_post, cpg, ct)
-            in_delta = _is_sig(celldmc_delta, cpg, ct)
+    merged = delta_flags.merge(pre_flags, on=["cpg", "cell_type"], how="left").merge(
+        post_flags, on=["cpg", "cell_type"], how="left"
+    )
+    merged["sig_pre"] = merged["sig_pre"].fillna(False)
+    merged["sig_post"] = merged["sig_post"].fillna(False)
 
-            if in_delta and not (in_pre or in_post):
-                cls: CrossContrastType = "state_of_recovery"
-            elif in_delta and (in_pre or in_post):
-                cls = "baseline_and_recovery"
-            elif (in_pre or in_post) and not in_delta:
-                cls = "trait_stable"
-            else:
-                cls = "other"
+    in_delta = merged["sig_delta"]
+    in_pre_or_post = merged["sig_pre"] | merged["sig_post"]
 
-            rows.append({"cpg": cpg, "cell_type": ct, "cross_contrast_class": cls})
+    # Vectorise classification via numpy conditions (avoids row-apply overhead)
+    merged["cross_contrast_class"] = np.select(
+        [
+            in_delta & ~in_pre_or_post,
+            in_delta & in_pre_or_post,
+            ~in_delta & in_pre_or_post,
+        ],
+        ["state_of_recovery", "baseline_and_recovery", "trait_stable"],
+        default="other",
+    )
 
-    return pd.DataFrame(rows)
+    return merged[["cpg", "cell_type", "cross_contrast_class"]].reset_index(drop=True)
 
 
 # ---------------------------------------------------------------------------

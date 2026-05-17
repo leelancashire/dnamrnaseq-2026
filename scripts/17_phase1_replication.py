@@ -56,6 +56,9 @@ def main() -> None:
     celldmc_path = LATEST_DIR / "celldmc_delta_emory.tsv"
     if celldmc_path.exists():
         celldmc_delta = pd.read_csv(celldmc_path, sep="\t")
+        # Normalise: celldmc output uses 'cpg', downstream expects 'cpg_id'
+        if "cpg" in celldmc_delta.columns and "cpg_id" not in celldmc_delta.columns:
+            celldmc_delta = celldmc_delta.rename(columns={"cpg": "cpg_id"})
         logger.info("Loaded CellDMC delta: %d rows.", len(celldmc_delta))
     else:
         logger.warning("celldmc_delta_emory.tsv not found; using empty DataFrame.")

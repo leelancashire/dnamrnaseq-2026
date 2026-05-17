@@ -178,6 +178,7 @@ def run_regulatory_enrichment(
     cell_type_col: str = "cell_type",
     fdr_col: str = "q_interaction",
     fdr_threshold: float = 0.05,
+    cpg_id_col: str | None = None,
 ) -> pd.DataFrame:
     """Run ENCODE / EpiMap enrichment for all (cell_type, feature) pairs.
 
@@ -222,6 +223,15 @@ def run_regulatory_enrichment(
             ]
         )
 
+    # Resolve CpG ID column: prefer explicit param, then try common names
+    if cpg_id_col is None:
+        for candidate in ("cpg", "cpg_id"):
+            if candidate in celldmc_delta.columns:
+                cpg_id_col = candidate
+                break
+        else:
+            cpg_id_col = celldmc_delta.columns[0]
+
     n_background = len(background_cpg_positions)
     rows: list[dict[str, Any]] = []
 
@@ -230,7 +240,7 @@ def run_regulatory_enrichment(
         ct_mask = (celldmc_delta[cell_type_col] == ct) & (
             celldmc_delta[fdr_col].fillna(1.0) < fdr_threshold
         )
-        sig_cpgs = celldmc_delta.loc[ct_mask, "cpg"].values
+        sig_cpgs = celldmc_delta.loc[ct_mask, cpg_id_col].values
         if len(sig_cpgs) == 0:
             logger.debug("No significant CpGs for cell type %s; skipping.", ct)
             continue
