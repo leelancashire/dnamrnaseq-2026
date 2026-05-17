@@ -246,10 +246,28 @@ def build_rnaseq_delta_matrix(
     ]
     paired_subcodes = pre_map.index.intersection(post_map.index)
 
+    # Detect whether the rnaseq_sample_col values match RNA-seq columns.
+    # If not, fall back to constructing '{Subcode}-{Visit}' which is the
+    # format used when the mmVAE CSV is indexed as {subcode}-{visit}.
+    rnaseq_col_set = set(rnaseq.columns)
+    sample_col_values = set(pre_map.values) | set(post_map.values)
+    use_sample_col = bool(sample_col_values & rnaseq_col_set)
+    if not use_sample_col:
+        logger.info(
+            "SampleName_RNASeq values (%s ...) not found in RNA-seq columns (%s ...). "
+            "Falling back to '{Subcode}-{Visit}' column format.",
+            list(sample_col_values)[:2],
+            list(rnaseq.columns[:2]),
+        )
+
     delta_rows: list[pd.Series] = []
     for subcode in paired_subcodes:
-        pre_sample = pre_map[subcode]
-        post_sample = post_map[subcode]
+        if use_sample_col:
+            pre_sample = str(pre_map[subcode])
+            post_sample = str(post_map[subcode])
+        else:
+            pre_sample = f"{subcode}-{pre_label}"
+            post_sample = f"{subcode}-{post_label}"
         if pre_sample not in rnaseq.columns or post_sample not in rnaseq.columns:
             logger.warning(
                 "Subject %s: RNA-seq sample(s) missing (%s, %s). Skipping.",

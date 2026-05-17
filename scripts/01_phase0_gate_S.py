@@ -89,34 +89,32 @@ def main() -> None:
         sys.exit(1)
 
     best_subject_rows = []
+    # BL = baseline (PRE), 12W = 12-week follow-up (POST)
     visit_map = {"BL": "PRE-IOP", "12W": "POST-IOP"}
+    # Map numeric Response coding: 1.0=R, 2.0=NR, 3.0=NA
+    response_map = {"1.0": "R", "2.0": "NR", "3.0": "NA", "1": "R", "2": "NR", "3": "NA"}
+
     for sample_name, row in best_pdata.iterrows():
         raw_visit = str(row.get("Visit", ""))
         visit_mapped = visit_map.get(raw_visit, raw_visit)
-        # Subcode: extract from SampleName or use SampleName as-is
-        # BEST SampleName format varies; use the SampleName as subcode base
-        # e.g. "XXXXX_BL" or "XXXXX_12W". Try splitting on "_BL"/"_12W"
-        name = str(sample_name)
-        subcode = (
-            name.replace("_BL", "").replace("_12W", "").replace("-BL", "").replace("-12W", "")
-        )
+        # pData2 has a Subcode column; use it directly rather than parsing the
+        # array barcode (207944480128_R02C01) which contains no visit suffix.
+        subcode = str(row.get("Subcode", sample_name))
+        # BEST DNAm bVals columns use the array barcode (pData2 index).
+        dnam_sample = str(sample_name)
+        # BEST RNA-seq columns use {Subcode}-{BL|12W} format,
+        # e.g. BEST-307964-BL (Subcode already contains the BEST prefix).
+        rnaseq_sample = f"{subcode}-{raw_visit}"
         best_subject_rows.append({
             "Subcode": subcode,
             "Visit": visit_mapped,
-            "Response": str(row.get("Response", "NA")),
-            "SampleName_DNAm": name,
-            "SampleName_RNASeq": name,
+            "Response": response_map.get(str(row.get("Response", "NA")), "NA"),
+            "SampleName_DNAm": dnam_sample,
+            "SampleName_RNASeq": rnaseq_sample,
         })
     best_subject_data = pd.DataFrame(best_subject_rows)
 
-    # Map numeric Response to R/NR: 1.0->R, 2.0->NR, 3.0->NA
-    response_map = {"1.0": "R", "2.0": "NR", "3.0": "NA", "1": "R", "2": "NR", "3": "NA"}
-    best_subject_data["Response"] = best_subject_data["Response"].map(
-        lambda x: response_map.get(str(x), str(x))
-    )
-
     # Check BEST RNA-seq column format matches subject data
-    # best.rnaseq.data.csv columns may use the same format as best.bVals (SampleName)
     logger.info("BEST RNA-seq columns sample: %s", list(best_rnaseq.columns[:3]))
     logger.info("BEST subject data SampleName_RNASeq sample: %s",
                 list(best_subject_data["SampleName_RNASeq"][:3]))
