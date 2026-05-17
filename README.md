@@ -6,7 +6,8 @@ away from the treatment-resistant-depression inflammatory state."*
 
 Joint DNAm + RNA-seq multi-omics analysis. Emory + BEST cohorts.
 
-**Status:** Scaffold only. Analysis scripts land in Phase 0+ (see plan).
+**Status:** Scaffold (v0.1.0). Data loaders and preprocessing Snakemake rules are functional.
+Embedding, trajectory, and figure rules are stubs pending Phase 0 gate results.
 
 ---
 
@@ -145,11 +146,28 @@ Hooks: ruff format + lint, mypy strict on `src/`, nbstripout, large-file guard (
 
 ## Analysis Plan
 
-Full v2.2 analysis plan (trajectory atlas methodology, phase gates, embedding arms, conformal
-prediction, mediation analysis):
+Full v2.2 analysis plan (trajectory atlas methodology, Phase 0 gates, embedding arms,
+conformal prediction, mediation analysis):
 
 `04-projects/dnamrnaseq/2026-05-17-integrated-analysis-plan-v2.md` in the companion knowledge
-vault. Section 13 is the repo scaffold spec this repo was built from.
+vault (at `/home/llanc/claude-code/` on Lee's machine). Section 13 is the repo scaffold spec
+this repo was built from.
+
+**Key architectural choices (from Section 13):**
+- `src/` layout forces editable installs; avoids the "passes locally, fails in CI" import trap.
+- Snakemake DAG with `workflow/rules/` handles partial reruns and DAG-aware caching.
+- `analysis/YYYY-MM-DD-slug/` dated run directories with committed config snapshots ensure
+  every result is traceable to an exact code version + config + data snapshot.
+- Manuscript `figures/` and `supplementary/` live in the repo (code-generated); manuscript prose
+  stays in the vault (knowledge layer).
+
+## CI Status
+
+Two GitHub Actions workflows:
+- `ci.yml` runs on every push/PR: ruff lint + format, mypy strict on `src/`, pytest on
+  synthetic fixtures. Target: <5 min.
+- `smoke-pipeline.yml` runs on push to main + weekly: Snakemake DAG parse + preprocessing
+  stub rules on synthetic data. Target: <10 min.
 
 ---
 
