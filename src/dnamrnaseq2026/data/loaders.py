@@ -323,6 +323,102 @@ def check_sample_alignment(
 
 
 # ---------------------------------------------------------------------------
+# Public loaders — RNA-seq (mmVAE CSV format)
+# ---------------------------------------------------------------------------
+
+
+def load_emory_rnaseq(mmvae_dir: Path | None = None) -> pd.DataFrame:
+    """Load Emory RNA-seq log-CPM matrix from mmVAE CSV.
+
+    Returns a DataFrame of shape (n_genes, n_samples).
+    Columns are in format '{SubjectID}-{Visit}' (e.g. 'AMC-280058-POST-IOP').
+    Index: gene identifiers (Ensembl or symbol depending on source prep).
+
+    Parameters
+    ----------
+    mmvae_dir:
+        Override the mmVAE data directory from config.yaml.
+
+    Returns
+    -------
+    pd.DataFrame
+        Index: gene IDs. Columns: sample IDs ({SubjectID}-{Visit}).
+    """
+    from dnamrnaseq2026.data.config import get_emory_mmvae_dir
+
+    data_dir = mmvae_dir or get_emory_mmvae_dir()
+    path = Path(data_dir) / "emory.rnaseq.data.csv"
+    if not path.exists():
+        raise FileNotFoundError(f"Emory RNA-seq not found at {path}. Check config.yaml.")
+
+    logger.info("Loading Emory RNA-seq log-CPM (mmVAE CSV)...")
+    df = pd.read_csv(str(path), index_col=0)
+    logger.info("  emory.rnaseq: %s  [genes x samples]", df.shape)
+    return df
+
+
+def load_best_rnaseq(mmvae_dir: Path | None = None) -> pd.DataFrame:
+    """Load BEST RNA-seq log-CPM matrix from mmVAE CSV.
+
+    Returns a DataFrame of shape (n_genes, n_samples).
+    Columns are in format '{SubjectID}-{Visit}'.
+
+    Parameters
+    ----------
+    mmvae_dir:
+        Override the mmVAE data directory from config.yaml.
+
+    Returns
+    -------
+    pd.DataFrame
+        Index: gene IDs. Columns: sample IDs ({SubjectID}-{Visit}).
+    """
+    from dnamrnaseq2026.data.config import get_emory_mmvae_dir
+
+    data_dir = mmvae_dir or get_emory_mmvae_dir()
+    path = Path(data_dir) / "best.rnaseq.data.csv"
+    if not path.exists():
+        raise FileNotFoundError(f"BEST RNA-seq not found at {path}. Check config.yaml.")
+
+    logger.info("Loading BEST RNA-seq log-CPM (mmVAE CSV)...")
+    df = pd.read_csv(str(path), index_col=0)
+    logger.info("  best.rnaseq: %s  [genes x samples]", df.shape)
+    return df
+
+
+def load_emory_subject_data(mmvae_dir: Path | None = None) -> pd.DataFrame:
+    """Load Emory subject metadata (Response, Visit, SampleName mappings).
+
+    The mmVAE CSV has string Response labels ('R'/'NR') unlike pData2's
+    numeric codes. This is the preferred source for Response labels.
+
+    Returns a DataFrame with columns: Subcode, Visit, age, sex, Response,
+    SampleName_RNASeq, SampleName_DNAm, id.
+
+    Parameters
+    ----------
+    mmvae_dir:
+        Override the mmVAE data directory from config.yaml.
+
+    Returns
+    -------
+    pd.DataFrame
+        Index: row number. Columns include Response (str: 'R'/'NR') and Visit.
+    """
+    from dnamrnaseq2026.data.config import get_emory_mmvae_dir
+
+    data_dir = mmvae_dir or get_emory_mmvae_dir()
+    path = Path(data_dir) / "emory.subject.data.csv"
+    if not path.exists():
+        raise FileNotFoundError(f"Emory subject data not found at {path}. Check config.yaml.")
+
+    logger.info("Loading Emory subject data...")
+    df = pd.read_csv(str(path), index_col=0)
+    logger.info("  emory.subject.data: %s", df.shape)
+    return df
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point (called by `dnamrnaseq-load` console script)
 # ---------------------------------------------------------------------------
 
