@@ -1,0 +1,47 @@
+$schema: "http://json-schema.org/draft-07/schema#"
+title: dnamrnaseq2026 config schema
+type: object
+required:
+  - data
+  - run
+properties:
+  data:
+    type: object
+    required:
+      - emory_dnam_dir
+      - emory_mmvae_dir
+    properties:
+      emory_dnam_dir:
+        type: string
+        description: "Path to the Emory DNAm data directory (OneDrive mount)"
+      emory_mmvae_dir:
+        type: string
+        description: "Path to the Emory mmVAE supplementary data directory"
+      external:
+        type: object
+        properties:
+          gse98793:
+            type: [string, "null"]
+          gtex:
+            type: [string, "null"]
+          aurora:
+            type: [string, "null"]
+  run:
+    type: object
+    properties:
+      seed:
+        type: integer
+        default: 42
+      embedding_seeds:
+        type: array
+        items:
+          type: integer
+      conformal_alpha:
+        type: number
+        minimum: 0
+        maximum: 1
+        default: 0.10
+      n_jobs:
+        type: integer
+        minimum: 1
+        default: 4

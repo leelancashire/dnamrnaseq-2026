@@ -1,0 +1,11 @@
+name: dnamrnaseq2026-r
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - r-base=4.3
+  - bioconductor-epidish>=2.16
+  - bioconductor-limma>=3.56
+  - r-hima>=2.0
+  - r-yaml

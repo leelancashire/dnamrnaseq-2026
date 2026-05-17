@@ -1,0 +1,13 @@
+name: dnamrnaseq2026-python
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pandas>=2.0
+  - numpy>=1.26
+  - scipy>=1.11
+  - pyreadr>=0.5
+  - rdata>=0.10
+  - pyyaml>=6.0
+  - pyarrow>=14.0
