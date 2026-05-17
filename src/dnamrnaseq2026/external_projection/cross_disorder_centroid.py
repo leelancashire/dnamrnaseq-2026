@@ -93,8 +93,7 @@ def harmonise_expression_matrices(
     )
     if n_shared < 5000:
         logger.warning(
-            "Fewer than 5000 shared genes (%d). "
-            "Check gene ID format (symbol vs Ensembl).",
+            "Fewer than 5000 shared genes (%d). " "Check gene ID format (symbol vs Ensembl).",
             n_shared,
         )
 
@@ -308,15 +307,16 @@ def project_to_pca_2d(
     emory_pcs["Response"] = emory_response.reindex(emory_pcs.index)
     emory_pcs["cohort"] = "Emory"
 
-    gse_pcs = pd.DataFrame(
-        combined_pcs[n_emory:], index=gse_filt.columns, columns=["PC1", "PC2"]
-    )
+    gse_pcs = pd.DataFrame(combined_pcs[n_emory:], index=gse_filt.columns, columns=["PC1", "PC2"])
     gse_pcs["is_trd"] = gse_trd_mask.reindex(gse_pcs.index).fillna(False)
     gse_pcs["cohort"] = "GSE98793"
 
     # Project centroids
     centroid_names = [
-        "emory_r_centroid", "emory_nr_centroid", "gse_trd_centroid", "gse_control_centroid"
+        "emory_r_centroid",
+        "emory_nr_centroid",
+        "gse_trd_centroid",
+        "gse_control_centroid",
     ]
     centroid_points = {}
     for name in centroid_names:

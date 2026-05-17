@@ -75,7 +75,9 @@ def main() -> None:
     seed = cfg["run"]["seed"]
     logger.info(
         "Gate 0-T starting. Seed=%d, top_cpgs=%d, top_genes=%d",
-        seed, args.n_cpgs, args.n_genes,
+        seed,
+        args.n_cpgs,
+        args.n_genes,
     )
 
     # Load data
@@ -89,12 +91,8 @@ def main() -> None:
     response = paired_info.set_index("Subcode")["Response"]
 
     # Build delta matrices
-    dnam_delta = build_dnam_delta_matrix(
-        bvals, subject_data, top_n_cpgs=args.n_cpgs
-    )
-    rna_delta = build_rnaseq_delta_matrix(
-        rnaseq, subject_data, top_n_genes=args.n_genes
-    )
+    dnam_delta = build_dnam_delta_matrix(bvals, subject_data, top_n_cpgs=args.n_cpgs)
+    rna_delta = build_rnaseq_delta_matrix(rnaseq, subject_data, top_n_genes=args.n_genes)
     joint = build_joint_delta_matrix(dnam_delta, rna_delta, scale=True)
     logger.info("Joint delta matrix: %s", joint.shape)
 
@@ -145,13 +143,11 @@ def main() -> None:
     # Loadings CSV: top 50 features by absolute loading on PC1 + PC2
     loadings = {}
     for i, pc_name in enumerate(pc_scores.columns):
-        top50 = (
-            abs(pca.components_[i])
-            .argsort()[::-1][:50]
-        )
+        top50 = abs(pca.components_[i]).argsort()[::-1][:50]
         loadings[pc_name] = [(joint.columns[j], float(pca.components_[i][j])) for j in top50]
 
     import pandas as pd
+
     rows = []
     for pc_name, feats in loadings.items():
         for rank, (feat, loading) in enumerate(feats):
@@ -163,6 +159,7 @@ def main() -> None:
 
     # Arrow plot
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
@@ -183,7 +180,11 @@ def main() -> None:
         ax.scatter(
             float(pc_scores.loc[subcode, "PC1"]),
             float(pc_scores.loc[subcode, "PC2"]),
-            c=color, marker=marker, s=40, zorder=3, alpha=0.8,
+            c=color,
+            marker=marker,
+            s=40,
+            zorder=3,
+            alpha=0.8,
         )
 
     # Centroid markers
@@ -192,15 +193,25 @@ def main() -> None:
         if mask.sum() > 0:
             cx = float(pc_scores.loc[mask, "PC1"].mean())
             cy = float(pc_scores.loc[mask, "PC2"].mean())
-            ax.scatter(cx, cy, c=color, marker="*", s=300, zorder=5,
-                       edgecolors="black", linewidth=1.0, label=f"{resp_label} centroid")
+            ax.scatter(
+                cx,
+                cy,
+                c=color,
+                marker="*",
+                s=300,
+                zorder=5,
+                edgecolors="black",
+                linewidth=1.0,
+                label=f"{resp_label} centroid",
+            )
 
     from matplotlib.lines import Line2D
+
     legend_elements = [
-        Line2D([0], [0], marker="o", color="w", markerfacecolor="#2196F3",
-               markersize=8, label="R"),
-        Line2D([0], [0], marker="^", color="w", markerfacecolor="#F44336",
-               markersize=8, label="NR"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor="#2196F3", markersize=8, label="R"),
+        Line2D(
+            [0], [0], marker="^", color="w", markerfacecolor="#F44336", markersize=8, label="NR"
+        ),
     ]
     ax.legend(handles=legend_elements, loc="upper right")
 
@@ -227,10 +238,14 @@ def main() -> None:
     print("=" * 60)
     print("Gate 0-T: Trajectory-structure visibility test")
     print("=" * 60)
-    print(f"Paired subjects: {results['n_paired_subjects']} "
-          f"(R={results['n_responders']}, NR={results['n_non_responders']})")
-    print(f"Features: {results['n_features_total']} "
-          f"({results['n_cpgs_used']} CpGs + {results['n_genes_used']} genes)")
+    print(
+        f"Paired subjects: {results['n_paired_subjects']} "
+        f"(R={results['n_responders']}, NR={results['n_non_responders']})"
+    )
+    print(
+        f"Features: {results['n_features_total']} "
+        f"({results['n_cpgs_used']} CpGs + {results['n_genes_used']} genes)"
+    )
     print(f"PERMANOVA: F={results['permanova_f']:.4f}, p={results['permanova_p']:.4f}")
     print(f"Max Cohen's d (across PCs): {results['max_cohens_d']:.4f}")
     if results["hotelling_p"] is not None:

@@ -100,10 +100,7 @@ def compute_cohens_d_per_pc(
             continue
         pooled_sd = float(
             np.sqrt(
-                (
-                    (len(r_vals) - 1) * r_vals.std() ** 2
-                    + (len(nr_vals) - 1) * nr_vals.std() ** 2
-                )
+                ((len(r_vals) - 1) * r_vals.std() ** 2 + (len(nr_vals) - 1) * nr_vals.std() ** 2)
                 / (len(r_vals) + len(nr_vals) - 2)
             )
         )

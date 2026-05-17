@@ -146,9 +146,7 @@ def validate_delta_cell_fractions(
         delta = row_post - row_pre
         delta_rows.append(delta.rename(subcode))
         # delta_N2LR = N2LR_post - N2LR_pre
-        delta_n2lr_vals.append(
-            float(n2lr.loc[post_sample]) - float(n2lr.loc[pre_sample])
-        )
+        delta_n2lr_vals.append(float(n2lr.loc[post_sample]) - float(n2lr.loc[pre_sample]))
 
     delta_props = pd.DataFrame(delta_rows)  # (n_paired, n_cell_types)
     delta_n2lr = pd.Series(delta_n2lr_vals, index=delta_props.index, name="delta_N2LR")
@@ -160,9 +158,7 @@ def validate_delta_cell_fractions(
     sd_per_cell = delta_props.std(axis=0)
     mono_sd = float(sd_per_cell.get("Mono", 0.0))
     neu_sd = float(sd_per_cell.get("Neu", 0.0))
-    validation_2_pass = (mono_sd >= SD_DELTA_PROP_THRESHOLD) and (
-        neu_sd >= SD_DELTA_PROP_THRESHOLD
-    )
+    validation_2_pass = (mono_sd >= SD_DELTA_PROP_THRESHOLD) and (neu_sd >= SD_DELTA_PROP_THRESHOLD)
     logger.info(
         "Validation 2: SD(delta_Mono)=%.4f, SD(delta_Neu)=%.4f (threshold=%.2f) -> %s",
         mono_sd,

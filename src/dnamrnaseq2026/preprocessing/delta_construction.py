@@ -314,9 +314,7 @@ def build_joint_delta_matrix(
         Shape (n_subjects, n_cpgs + n_genes). Index: subject IDs.
     """
     shared_subjects = dnam_delta.index.intersection(rnaseq_delta.index)
-    logger.info(
-        "Shared paired subjects (DNAm and RNA-seq): %d", len(shared_subjects)
-    )
+    logger.info("Shared paired subjects (DNAm and RNA-seq): %d", len(shared_subjects))
     joint = pd.concat(
         [dnam_delta.loc[shared_subjects], rnaseq_delta.loc[shared_subjects]],
         axis=1,

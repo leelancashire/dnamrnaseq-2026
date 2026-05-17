@@ -60,20 +60,24 @@ def synthetic_subject_data():
     rows = []
     for i in range(N_PAIRED):
         response = "R" if i < N_PAIRED // 2 else "NR"
-        rows.append({
-            "Subcode": f"subj{i:02d}",
-            "Visit": "PRE-IOP",
-            "Response": response,
-            "SampleName_DNAm": f"subj{i:02d}_PRE",
-            "SampleName_RNASeq": f"subj{i:02d}_PRE",
-        })
-        rows.append({
-            "Subcode": f"subj{i:02d}",
-            "Visit": "POST-IOP",
-            "Response": response,
-            "SampleName_DNAm": f"subj{i:02d}_POST",
-            "SampleName_RNASeq": f"subj{i:02d}_POST",
-        })
+        rows.append(
+            {
+                "Subcode": f"subj{i:02d}",
+                "Visit": "PRE-IOP",
+                "Response": response,
+                "SampleName_DNAm": f"subj{i:02d}_PRE",
+                "SampleName_RNASeq": f"subj{i:02d}_PRE",
+            }
+        )
+        rows.append(
+            {
+                "Subcode": f"subj{i:02d}",
+                "Visit": "POST-IOP",
+                "Response": response,
+                "SampleName_DNAm": f"subj{i:02d}_POST",
+                "SampleName_RNASeq": f"subj{i:02d}_POST",
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -91,17 +95,20 @@ def synthetic_pdata(synthetic_bvals):
     nk = rng.uniform(0.02, 0.08, n)
     lymph = bcell + cd4t + cd8t + nk
     n2lr = neu / np.maximum(lymph, 1e-6)
-    df = pd.DataFrame({
-        "Bcell": bcell,
-        "CD4T": cd4t,
-        "CD8T": cd8t,
-        "Mono": mono,
-        "Neu": neu,
-        "NK": nk,
-        "N2LR": n2lr,
-        "Response": ["R"] * (n // 2) + ["NR"] * (n - n // 2),
-        "Visit": ["PRE-IOP", "POST-IOP"] * (n // 2),
-    }, index=sample_ids)
+    df = pd.DataFrame(
+        {
+            "Bcell": bcell,
+            "CD4T": cd4t,
+            "CD8T": cd8t,
+            "Mono": mono,
+            "Neu": neu,
+            "NK": nk,
+            "N2LR": n2lr,
+            "Response": ["R"] * (n // 2) + ["NR"] * (n - n // 2),
+            "Visit": ["PRE-IOP", "POST-IOP"] * (n // 2),
+        },
+        index=sample_ids,
+    )
     return df
 
 
@@ -165,9 +172,7 @@ class TestDeltaConstruction:
             build_rnaseq_delta_matrix,
         )
 
-        dnam_delta = build_dnam_delta_matrix(
-            synthetic_bvals, synthetic_subject_data, top_n_cpgs=20
-        )
+        dnam_delta = build_dnam_delta_matrix(synthetic_bvals, synthetic_subject_data, top_n_cpgs=20)
         rna_delta = build_rnaseq_delta_matrix(
             synthetic_rnaseq, synthetic_subject_data, top_n_genes=10
         )
@@ -190,9 +195,7 @@ class TestGateTPCA:
         )
         from dnamrnaseq2026.preprocessing.gate_t_pca import run_pca
 
-        dnam_delta = build_dnam_delta_matrix(
-            synthetic_bvals, synthetic_subject_data, top_n_cpgs=20
-        )
+        dnam_delta = build_dnam_delta_matrix(synthetic_bvals, synthetic_subject_data, top_n_cpgs=20)
         rna_delta = build_rnaseq_delta_matrix(
             synthetic_rnaseq, synthetic_subject_data, top_n_genes=10
         )
@@ -217,9 +220,7 @@ class TestGateTPCA:
             run_pca,
         )
 
-        dnam_delta = build_dnam_delta_matrix(
-            synthetic_bvals, synthetic_subject_data, top_n_cpgs=20
-        )
+        dnam_delta = build_dnam_delta_matrix(synthetic_bvals, synthetic_subject_data, top_n_cpgs=20)
         rna_delta = build_rnaseq_delta_matrix(
             synthetic_rnaseq, synthetic_subject_data, top_n_genes=10
         )
@@ -232,9 +233,7 @@ class TestGateTPCA:
         for v in d.values():
             assert v >= 0.0
 
-    def test_permanova_returns_p(
-        self, synthetic_bvals, synthetic_rnaseq, synthetic_subject_data
-    ):
+    def test_permanova_returns_p(self, synthetic_bvals, synthetic_rnaseq, synthetic_subject_data):
         """PERMANOVA returns a p-value in [0, 1]."""
         from dnamrnaseq2026.preprocessing.delta_construction import (
             build_dnam_delta_matrix,
@@ -244,9 +243,7 @@ class TestGateTPCA:
         )
         from dnamrnaseq2026.preprocessing.gate_t_pca import run_pca, run_permanova
 
-        dnam_delta = build_dnam_delta_matrix(
-            synthetic_bvals, synthetic_subject_data, top_n_cpgs=20
-        )
+        dnam_delta = build_dnam_delta_matrix(synthetic_bvals, synthetic_subject_data, top_n_cpgs=20)
         rna_delta = build_rnaseq_delta_matrix(
             synthetic_rnaseq, synthetic_subject_data, top_n_genes=10
         )
@@ -333,9 +330,7 @@ class TestGateS:
             index=synthetic_rnaseq.index,
             columns=synthetic_rnaseq.columns,
         )
-        emory_dnam = build_dnam_delta_matrix(
-            synthetic_bvals, synthetic_subject_data, top_n_cpgs=20
-        )
+        emory_dnam = build_dnam_delta_matrix(synthetic_bvals, synthetic_subject_data, top_n_cpgs=20)
         emory_rna = build_rnaseq_delta_matrix(
             synthetic_rnaseq, synthetic_subject_data, top_n_genes=10
         )
@@ -363,9 +358,7 @@ class TestGateS:
 
         emory, best = emory_best_deltas
         emory_h, best_h = harmonise_feature_sets(emory, best, min_features=1)
-        results = train_source_domain_classifier(
-            emory_h, best_h, seed=42, n_jobs=1
-        )
+        results = train_source_domain_classifier(emory_h, best_h, seed=42, n_jobs=1)
         assert 0.0 <= results["lr_mean_auc"] <= 1.0
         assert 0.0 <= results["rf_mean_auc"] <= 1.0
 
@@ -418,9 +411,9 @@ class TestGateX:
         emory_pre = synthetic_rnaseq[pre_cols]
 
         # Build response Series indexed by PRE sample column
-        resp_map = synthetic_subject_data[
-            synthetic_subject_data["Visit"] == "PRE-IOP"
-        ].set_index("SampleName_RNASeq")["Response"]
+        resp_map = synthetic_subject_data[synthetic_subject_data["Visit"] == "PRE-IOP"].set_index(
+            "SampleName_RNASeq"
+        )["Response"]
 
         emory_norm, gse_norm = harmonise_expression_matrices(emory_pre, synthetic_gse_expr)
 
