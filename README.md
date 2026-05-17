@@ -146,12 +146,14 @@ Hooks: ruff format + lint, mypy strict on `src/`, nbstripout, large-file guard (
 
 ## Analysis Plan
 
-Full v2.2 analysis plan (trajectory atlas methodology, Phase 0 gates, embedding arms,
+**Execution-ready step-by-step plan: [`docs/ANALYSIS_PLAN.md`](docs/ANALYSIS_PLAN.md).** One section per step (~30 steps across Phase 0 gates through Phase 4 deliverables), each with concrete inputs, methods, outputs, acceptance criteria, and Snakefile rule names. This is what a team member opens when they pick up a step.
+
+Full v2.2 strategic plan (trajectory atlas methodology, Phase 0 gates, embedding arms,
 conformal prediction, mediation analysis):
 
 `04-projects/dnamrnaseq/2026-05-17-integrated-analysis-plan-v2.md` in the companion knowledge
 vault (at `/home/llanc/claude-code/` on Lee's machine). Section 13 is the repo scaffold spec
-this repo was built from.
+this repo was built from. v2.2 is the *why*; `docs/ANALYSIS_PLAN.md` is the *how*.
 
 **Key architectural choices (from Section 13):**
 - `src/` layout forces editable installs; avoids the "passes locally, fails in CI" import trap.
