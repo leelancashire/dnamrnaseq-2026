@@ -92,3 +92,6 @@ filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::UserWarning",
 ]
+markers = [
+    "requires_r_bioc: tests that need the dnamrnaseq2026-r-bioc conda env (EpiDISH, CellDMC, decoupleR). Skipped in default CI; run via r-bioc.yml workflow or: pytest -m requires_r_bioc.",
+]

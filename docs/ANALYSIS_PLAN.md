@@ -59,6 +59,47 @@ Strategic v2.2 (vault) tells *why* each step exists and how it differentiates fr
 
 ---
 
+### R-Bioconductor Environment (Phase 1 prerequisite)
+
+Phase 1 requires a separate R + Bioconductor conda env (`dnamrnaseq2026-r-bioc`).
+The Snakemake Phase 1 rules activate it automatically via `--use-conda`. You do not
+need to activate it manually when running via Snakemake.
+
+**One-time setup (10-30 min):**
+
+```bash
+conda env create -f envs/r-bioc.yml
+# Verify:
+conda activate dnamrnaseq2026-r-bioc
+Rscript -e "library(EpiDISH); cat(sprintf('EpiDISH %s OK\n', packageVersion('EpiDISH')))"
+```
+
+**Architecture decision (Option 2):** R scripts write CSV outputs; Python rules read them.
+rpy2 is NOT used. This avoids the well-known instability of rpy2 + Bioconductor.
+
+**CellDMC package note:** `CellDMC()` is an exported function inside the `EpiDISH`
+package on Bioconductor. There is no separate `bioconductor-celldmc` package on bioconda.
+Installing `bioconductor-epidish=2.16.0` gives you `CellDMC()`.
+
+**Bioconductor version:** 3.17 (r43 build suffix). Bioc 3.18 requires R 4.4 on bioconda.
+Pinning to R 4.3 + Bioc 3.17 is the stable production configuration. Dry-run solve
+confirmed 2026-05-17, linux-64, libmamba solver.
+
+**EpiDISH reference panel:** `centEpicV2` (1200 CpGs, 7 cell types, IDOL-optimised for
+Illumina EPIC arrays). Shipped with the EpiDISH package; no external download required.
+
+**Smoke test (optional, after env setup):**
+
+```bash
+conda activate dnamrnaseq2026-r-bioc
+pytest tests/test_r_bioc_smoke.py -m requires_r_bioc -v
+```
+
+Tests are skipped in the default `ci.yml` workflow. A separate `r-bioc.yml` CI workflow
+runs them on a weekly schedule or manual trigger.
+
+---
+
 # Phase 0: Four parallel go/no-go gates (Week 1)
 
 Four gates run in parallel across the team in Week 1. Each is a 1-2 day analysis with a sharp pass/fail criterion. If any gate fails, the corresponding piece of the v2.2 plan is removed or pivoted before Phase 1 starts. Phase 0 gates have no dependencies on each other and no prior steps.

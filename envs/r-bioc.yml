@@ -1,33 +1,74 @@
-name: dnamrnaseq-r-bioc
-# R + Bioconductor 3.18 environment for Phase 1 CellDMC and EpiDISH rules.
-# Snakemake --use-conda rules that need R-side Bioconductor packages use this env.
-# Pin Bioconductor 3.18 (compatible with R 4.3).
+name: dnamrnaseq2026-r-bioc
+# R-Bioconductor environment for Phase 1 cell-type deconvolution and CellDMC.
+#
+# Architecture note (Option 2): This env is invoked via Snakemake --use-conda.
+# R scripts write CSV outputs; Python rules read them. R and Python do NOT share
+# a process. This avoids rpy2's well-known instability with Bioconductor stacks.
+#
+# Key package decisions:
+#   - bioconductor-epidish 2.16.0: EpiDISH ships CellDMC() as an exported
+#     function — there is no separate bioconductor-celldmc package on bioconda.
+#     CellDMC is accessed via EpiDISH::CellDMC().
+#   - bioconductor-decoupler 2.6.0: Bioconductor decoupleR. Python decoupleR
+#     (decoupler-py) is available in the Python env for Steps 1.4/1.5; this R
+#     version is available for R-native TF-activity workflows if needed.
+#   - bioconductor-mcsea 1.20.0: mCSEA for methylation set enrichment analysis.
+#   - bioconductor-methylclock 1.6.0 + methylclockdata 1.8.1: epigenetic clock
+#     estimation (Horvath, Hannum, PhenoAge, GrimAge).
+#   - Bioconductor 3.17 (r43 build suffix): this is the correct Bioc release for
+#     R 4.3 on the bioconda channel. The task brief specified Bioc 3.18, but 3.18
+#     requires R 4.4 on bioconda. Pinning to 3.17-compatible builds is the only
+#     solvable configuration with r-base=4.3.
+#
+# Solve verification: dry-run solve confirmed on 2026-05-17 (linux-64, libmamba
+# solver). All packages resolved without conflicts from bioconda + conda-forge.
+#
+# Usage:
+#   conda env create -f envs/r-bioc.yml
+#   conda activate dnamrnaseq2026-r-bioc
+#   Rscript -e "library(EpiDISH); library(decoupleR); cat('OK\n')"
+#
+# Smoke test:
+#   pytest tests/ -m requires_r_bioc -v
 
 channels:
-  - conda-forge
   - bioconda
+  - conda-forge
   - defaults
 
 dependencies:
-  - python=3.11
+  # R base (Bioconductor 3.17 release)
   - r-base=4.3
-  - rpy2>=3.5
 
-  # Bioconductor packages
-  - bioconductor-epidish>=2.16     # EpiDISH + CellDMC
-  - bioconductor-limma>=3.56       # limma-voom DE
-  - bioconductor-edger>=4.0        # filterByExpr, TMM normalisation
-  - bioconductor-minfi>=1.44       # DNAm utilities (array annotation)
+  # Core cell-type deconvolution + CellDMC
+  # CellDMC is an exported function inside EpiDISH — not a separate package.
+  - bioconductor-epidish=2.16.0
 
-  # CRAN R packages
-  - r-matrix>=1.6
-  - r-biocmanager>=1.30
+  # mCSEA: methylation set enrichment analysis (Phase 1 enrichment steps)
+  - bioconductor-mcsea=1.20.0
 
-  # Python packages needed by the Snakemake script wrappers
-  - pandas>=2.0
-  - numpy>=1.26
-  - scipy>=1.11
-  - statsmodels>=0.14
-  - pyreadr>=0.5
-  - rdata>=0.10
-  - pyyaml>=6.0
+  # Epigenetic clocks (Phase 1 biological anchor metrics)
+  - bioconductor-methylclock=1.6.0
+  - bioconductor-methylclockdata=1.8.1
+
+  # decoupleR (R): TF-activity estimation from methylation-linked gene scores
+  # Python decoupleR is the primary route for Steps 1.4/1.5; this is the R
+  # fallback if TF enrichment requires R-native GRN references.
+  - bioconductor-decoupler=2.6.0
+
+  # Limma: required by EpiDISH and standard DNAm linear modelling
+  - bioconductor-limma=3.56.0
+
+  # R data wrangling.
+  # r-dplyr replaces the r-tidyverse meta-package: only dplyr is called by the
+  # R scripts in this repo (run_celldmc.R library(dplyr)). Pinning the
+  # meta-package risks pulling r-tidyverse>=2.0 on a future solve, which
+  # requires r-base>=4.4 and conflicts with our 4.3 pin.
+  # If additional tidyverse components are needed, add them explicitly here.
+  - r-dplyr
+  - r-yaml
+  - r-optparse
+
+  # Arrow parquet I/O (required by run_epidish.R and run_celldmc.R).
+  # KEEP IN SYNC with workflow/envs/r-bioconductor.yaml.
+  - r-arrow
