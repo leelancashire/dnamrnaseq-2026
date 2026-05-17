@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,7 +34,12 @@ ANALYSIS_DIR = Path("analysis/latest")
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    from dnamrnaseq2026.data.loaders import load_best, load_emory
+    from dnamrnaseq2026.data.loaders import (
+        load_best,
+        load_best_pdata2,
+        load_emory,
+        load_emory_pdata2,
+    )
     from dnamrnaseq2026.preprocessing.cell_type_correction import (
         CELL_TYPE_COLS,
         run_epidish_from_pdata,
@@ -41,6 +47,8 @@ def main() -> None:
     )
 
     results: dict[str, object] = {}
+
+    pdata2_loaders = {"emory": load_emory_pdata2, "best": load_best_pdata2}
 
     for cohort_name, loader in [("emory", load_emory), ("best", load_best)]:
         logger.info("Processing %s cohort for EpiDISH.", cohort_name)
@@ -54,18 +62,31 @@ def main() -> None:
         n_samples = len(pdata)
         logger.info("%s: %d samples, %d CpGs.", cohort_name, n_samples, len(bvals_df))
 
-        # Attempt rpy2 EpiDISH; fall back to pData2
+        # Attempt rpy2 EpiDISH; fall back to pData2 cell fraction columns
         beta_matrix = bvals_df.values.astype(float)
         cpg_ids = list(bvals_df.index)
-        sample_ids = list(pdata.index)
+        # For rpy2, sample_ids are the bvals column names (SampleName_DNAm / SentrixID)
+        sample_ids_dnam = list(bvals_df.columns)
 
         try:
-            props = run_epidish_rpy2(beta_matrix, sample_ids, cpg_ids)
+            props = run_epidish_rpy2(beta_matrix, sample_ids_dnam, cpg_ids)
+            if props.empty or props.isnull().all().all():
+                raise ValueError("rpy2 EpiDISH returned empty/null fractions; falling back.")
             source = "rpy2_EpiDISH"
         except Exception as exc:
             logger.warning("rpy2 EpiDISH failed (%s); using pData2 fallback.", exc)
-            props = run_epidish_from_pdata(pdata)
-            source = "pData2_fallback"
+            try:
+                pdata2 = pdata2_loaders[cohort_name]()
+                props = run_epidish_from_pdata(pdata2)
+                source = "pData2_fallback"
+            except Exception as exc2:
+                logger.warning("pData2 fallback also failed (%s); using zero fractions.", exc2)
+                props = pd.DataFrame(
+                    np.zeros((n_samples, len(CELL_TYPE_COLS))),
+                    index=pdata.index,
+                    columns=CELL_TYPE_COLS,
+                )
+                source = "zero_fallback"
 
         logger.info("%s: cell fractions from %s, shape %s.", cohort_name, source, props.shape)
 

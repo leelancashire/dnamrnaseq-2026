@@ -58,14 +58,28 @@ def main() -> None:
     pdata_aug_path = LATEST_DIR / "pdata_emory_with_epidish.csv"
 
     if cell_props_path.exists():
-        cell_props = pd.read_csv(cell_props_path, index_col=0)
+        cell_props_raw = pd.read_csv(cell_props_path, index_col=0)
         pdata_aug = pd.read_csv(pdata_aug_path, index_col=0)
+        # cell_props_raw may be indexed by SentrixID (pData2) or AMC-... (subject_data)
+        # Remap to pdata_aug index via SampleName_DNAm if needed
+        if "SampleName_DNAm" in pdata_aug.columns and len(
+            pdata_aug.index.intersection(cell_props_raw.index)
+        ) == 0:
+            dnam_map = pdata_aug["SampleName_DNAm"].dropna()
+            cell_props = cell_props_raw.reindex(dnam_map.values).set_axis(dnam_map.index)
+            logger.info(
+                "Remapped cell_props from SentrixID to AMC-ID: %d/%d rows aligned.",
+                cell_props.notna().any(axis=1).sum(),
+                len(cell_props),
+            )
+        else:
+            cell_props = cell_props_raw
     else:
-        logger.warning("Step 1.1 outputs not found; using pData2 cell fractions.")
-        from dnamrnaseq2026.preprocessing.cell_type_correction import (
-            run_epidish_from_pdata,
+        logger.warning("Step 1.1 outputs not found; using zero cell fractions.")
+        from dnamrnaseq2026.preprocessing.cell_type_correction import CELL_TYPE_COLS as _CT
+        cell_props = pd.DataFrame(
+            np.zeros((len(pdata), len(_CT))), index=pdata.index, columns=_CT
         )
-        cell_props = run_epidish_from_pdata(pdata)
         pdata_aug = pdata.copy()
 
     # Exclude sex-chromosome CpGs
