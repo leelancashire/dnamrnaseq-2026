@@ -20,8 +20,9 @@ The join key between bVals columns and pData2 rows is `SampleName`
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 import pandas as pd
 
@@ -37,15 +38,15 @@ logger = logging.getLogger(__name__)
 
 def _load_rdata_pyreadr(path: Path) -> dict[str, pd.DataFrame]:
     """Load an RData file via pyreadr. Returns {object_name: DataFrame}."""
-    import pyreadr  # type: ignore[import-untyped]
+    import pyreadr
 
     result = pyreadr.read_r(str(path))
     return dict(result)
 
 
 def _rdata_squeeze_dataframe_constructor(
-    obj: dict[str, object],
-    attrs: dict[str, object],
+    obj: Any,
+    attrs: Mapping[str, Any],
 ) -> pd.DataFrame:
     """Custom rdata DataFrame constructor that squeezes (N,1) ndarray columns.
 
@@ -55,16 +56,16 @@ def _rdata_squeeze_dataframe_constructor(
     ("Data must be 1-dimensional, got ndarray of shape (N,1)"). This constructor
     squeezes such columns before building the DataFrame.
     """
-    import numpy as np  # type: ignore[import-untyped]
+    import numpy as np
 
-    squeezed: dict[str, object] = {}
+    squeezed: dict[str, Any] = {}
     for k, v in obj.items():
         if isinstance(v, np.ndarray) and v.ndim == 2 and v.shape[1] == 1:
             squeezed[k] = v.squeeze(axis=1)
         else:
             squeezed[k] = v
 
-    index = attrs.get("row.names", None) if attrs else None
+    index = attrs.get("row.names") if attrs else None
     return pd.DataFrame(squeezed, index=index)
 
 
@@ -75,8 +76,8 @@ def _load_rdata_rdata(path: Path, object_name: str) -> pd.DataFrame:
     to handle the ndarray-(N,1) column issue in pData2 files from
     minfi/Bioconductor pipelines.
     """
-    import numpy as np  # type: ignore[import-untyped]
-    import rdata  # type: ignore[import-untyped]
+    import numpy as np
+    import rdata
 
     parsed = rdata.parser.parse_file(str(path))
 
@@ -88,8 +89,7 @@ def _load_rdata_rdata(path: Path, object_name: str) -> pd.DataFrame:
     if object_name not in converted:
         available = list(converted.keys())
         raise KeyError(
-            f"Object '{object_name}' not found in {path.name}. "
-            f"Available: {available}"
+            f"Object '{object_name}' not found in {path.name}. " f"Available: {available}"
         )
 
     obj = converted[object_name]
@@ -97,9 +97,7 @@ def _load_rdata_rdata(path: Path, object_name: str) -> pd.DataFrame:
         return obj
     if isinstance(obj, np.ndarray):
         return pd.DataFrame(obj)
-    raise TypeError(
-        f"Object '{object_name}' loaded as {type(obj).__name__}, expected DataFrame."
-    )
+    raise TypeError(f"Object '{object_name}' loaded as {type(obj).__name__}, expected DataFrame.")
 
 
 def _load_rdata(
@@ -156,7 +154,7 @@ def _load_rdata(
 # ---------------------------------------------------------------------------
 
 
-def load_emory_bvals(data_dir: Optional[Path] = None) -> pd.DataFrame:
+def load_emory_bvals(data_dir: Path | None = None) -> pd.DataFrame:
     """Load Emory DNAm beta values (architecture CpG subset).
 
     Returns a DataFrame of shape (n_cpgs, n_samples).
@@ -183,7 +181,7 @@ def load_emory_bvals(data_dir: Optional[Path] = None) -> pd.DataFrame:
     return df
 
 
-def load_emory_pdata2(data_dir: Optional[Path] = None) -> pd.DataFrame:
+def load_emory_pdata2(data_dir: Path | None = None) -> pd.DataFrame:
     """Load Emory pData2 (sample metadata / covariates).
 
     Returns a DataFrame of shape (n_samples, n_covariates).
@@ -221,7 +219,7 @@ def load_emory_pdata2(data_dir: Optional[Path] = None) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def load_best_bvals(data_dir: Optional[Path] = None) -> pd.DataFrame:
+def load_best_bvals(data_dir: Path | None = None) -> pd.DataFrame:
     """Load BEST DNAm beta values (architecture CpG subset).
 
     Returns a DataFrame of shape (n_cpgs, n_samples).
@@ -248,7 +246,7 @@ def load_best_bvals(data_dir: Optional[Path] = None) -> pd.DataFrame:
     return df
 
 
-def load_best_pdata2(data_dir: Optional[Path] = None) -> pd.DataFrame:
+def load_best_pdata2(data_dir: Path | None = None) -> pd.DataFrame:
     """Load BEST pData2 (sample metadata / covariates).
 
     Returns a DataFrame of shape (n_samples, n_covariates).

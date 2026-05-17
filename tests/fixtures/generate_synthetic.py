@@ -13,7 +13,6 @@ The smoke-pipeline workflow calls this before running Snakemake on synthetic dat
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 
 import numpy as np
