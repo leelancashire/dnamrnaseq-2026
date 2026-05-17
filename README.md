@@ -6,8 +6,23 @@ away from the treatment-resistant-depression inflammatory state."*
 
 Joint DNAm + RNA-seq multi-omics analysis. Emory + BEST cohorts.
 
-**Status:** Scaffold (v0.1.0). Data loaders and preprocessing Snakemake rules are functional.
-Embedding, trajectory, and figure rules are stubs pending Phase 0 gate results.
+**Status:** Phase 0 complete (2026-05-17). All four go/no-go gates have run against
+real Emory + BEST data. Phase 1 (cell-type correction, CellDMC) can proceed.
+
+### Phase 0 gate verdicts (seed=42)
+
+| Gate | Verdict | Key metric |
+|------|---------|------------|
+| 0-T: Trajectory visibility (PCA, Emory) | **MARGINAL** | PERMANOVA p=0.111, max d=0.267 |
+| 0-C: EpiDISH validation (Emory) | **PASS** | abs(r(dMono,dN2LR))=0.354, p<0.0001 |
+| 0-S: Source-domain shift (Emory vs BEST) | **PASS** | max AUC=0.317 (RF) |
+| 0-X: Cross-disorder projection (Emory vs GSE98793) | **BLOCKED** | GSE98793 not downloaded |
+
+Full results: `analysis/2026-05-17-phase-0/<gate>/results.md` per gate.
+
+**0-T MARGINAL action**: proceed to Phase 1 with cell-type correction (CellDMC).
+Reassess 0-T after cell-type-corrected delta matrices are available.
+**0-X action**: download GSE98793 and re-run `python scripts/01_phase0_gate_X.py`.
 
 ---
 
