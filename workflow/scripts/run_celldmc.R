@@ -39,8 +39,18 @@
 #   --ncore  : number of cores for parallel CellDMC (default: 1)
 #
 # Outputs:
-#   TSV with columns: cpg, cell_type, coef, se, t, p_val, fdr, sig
+#   TSV with columns: cpg, cell_type, coef, se, t_stat, p_val, fdr, sig
 #   One row per (CpG, cell-type) interaction term.
+#
+# Column naming note (schema divergence vs Python path):
+#   This R script uses t_stat for the t-statistic column. The Python CellDMC
+#   implementation in src/dnamrnaseq2026/preprocessing/cell_type_correction.py
+#   uses a different schema: beta_response, beta_interaction, p_response,
+#   p_interaction, q_response, q_interaction (no t column). These are parallel
+#   code paths producing different output schemas from the same conceptual model.
+#   Any Phase 2 integration code that reads both must handle the rename:
+#   Python "p_interaction" ~ R "p_val"; Python "beta_interaction" ~ R "coef".
+#   See PR #5 review comment for tracking context.
 #
 # Design note on the phenotype encoding:
 #   CellDMC expects a numeric phenotype vector. Response (R/NR) is encoded as

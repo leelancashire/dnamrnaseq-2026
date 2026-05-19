@@ -31,7 +31,13 @@ dependencies:
   - bioconductor-methylclockdata=1.8.1
   - bioconductor-decoupler=2.6.0
   - bioconductor-limma=3.56.0
-  - r-tidyverse
+  # r-dplyr replaces r-tidyverse meta-package: only dplyr is called by the
+  # R scripts (run_celldmc.R). The meta-package risks a r-base>=4.4 pull
+  # on future solves, conflicting with the 4.3 pin here.
+  # KEEP IN SYNC with envs/r-bioc.yml (canonical spec at repo root).
+  - r-dplyr
   - r-yaml
   - r-optparse
+  # Arrow parquet I/O (required by run_epidish.R and run_celldmc.R).
+  # KEEP IN SYNC with envs/r-bioc.yml.
   - r-arrow
