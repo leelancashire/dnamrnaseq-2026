@@ -63,9 +63,10 @@ def main() -> None:
         pdata_aug = pd.read_csv(pdata_aug_path, index_col=0)
         # cell_props_raw may be indexed by SentrixID (pData2) or AMC-... (subject_data)
         # Remap to pdata_aug index via SampleName_DNAm if needed
-        if "SampleName_DNAm" in pdata_aug.columns and len(
-            pdata_aug.index.intersection(cell_props_raw.index)
-        ) == 0:
+        if (
+            "SampleName_DNAm" in pdata_aug.columns
+            and len(pdata_aug.index.intersection(cell_props_raw.index)) == 0
+        ):
             dnam_map = pdata_aug["SampleName_DNAm"].dropna()
             cell_props = cell_props_raw.reindex(dnam_map.values).set_axis(dnam_map.index)
             logger.info(
@@ -78,9 +79,8 @@ def main() -> None:
     else:
         logger.warning("Step 1.1 outputs not found; using zero cell fractions.")
         from dnamrnaseq2026.preprocessing.cell_type_correction import CELL_TYPE_COLS as _CT
-        cell_props = pd.DataFrame(
-            np.zeros((len(pdata), len(_CT))), index=pdata.index, columns=_CT
-        )
+
+        cell_props = pd.DataFrame(np.zeros((len(pdata), len(_CT))), index=pdata.index, columns=_CT)
         pdata_aug = pdata.copy()
 
     # Exclude sex-chromosome CpGs
@@ -115,9 +115,14 @@ def main() -> None:
     logger.info("PRE contrast done: %d rows.", len(celldmc_pre))
 
     # --- (b) POST contrast ---
-    post_mask = pdata_aug.get("Visit", pd.Series(dtype=str)).astype(str).str.upper().isin(
-        ["POST", "POST-IOP", "12W", "T1", "1"]
-    ) if "Visit" in pdata_aug.columns else pd.Series(True, index=pdata_aug.index)
+    post_mask = (
+        pdata_aug.get("Visit", pd.Series(dtype=str))
+        .astype(str)
+        .str.upper()
+        .isin(["POST", "POST-IOP", "12W", "T1", "1"])
+        if "Visit" in pdata_aug.columns
+        else pd.Series(True, index=pdata_aug.index)
+    )
     pdata_post = pdata_aug[post_mask]
     post_col_pos = [list(pdata_aug.index).index(s) for s in pdata_post.index]
     m_post = m_matrix[:, post_col_pos]
@@ -142,31 +147,85 @@ def main() -> None:
         post_ids_dnam,
         list(bvals_df.columns),  # M-matrix columns are bvals SentrixIDs
     )
-    # For cell_props (indexed by AMC-IDs), use RNA-based pairing
-    _, pre_ids_rna, post_ids_rna = filter_paired_ids_rna(pdata_aug)
-    # Only keep pairs where RNA IDs are in cell_props index
-    valid_rna = [
-        (sc, p, q) for sc, p, q in zip(paired_subjects, pre_ids_rna, post_ids_rna, strict=False)
-        if p in cell_props.index and q in cell_props.index
+    # For cell_props (indexed by AMC-IDs), use RNA-based pairing.
+    # filter_paired_ids_rna uses the pdata_aug index as sample IDs (AMC-IDs).
+    paired_subjects_rna, pre_ids_rna, post_ids_rna = filter_paired_ids_rna(pdata_aug)
+
+    # Build a subject-keyed lookup from the RNA pairing so we can safely
+    # intersect with the DNAm pairing and with cell_props availability.
+    rna_pre_by_sc: dict[str, str] = dict(zip(paired_subjects_rna, pre_ids_rna, strict=False))
+    rna_post_by_sc: dict[str, str] = dict(zip(paired_subjects_rna, post_ids_rna, strict=False))
+
+    # common_subjects: subjects paired in BOTH DNAm and RNA, AND whose RNA
+    # pre/post sample IDs are present in cell_props.  Preserve the sorted
+    # order from paired_subjects (DNAm side) to keep delta_m aligned.
+    common_subjects = [
+        sc
+        for sc in paired_subjects
+        if sc in rna_pre_by_sc
+        and rna_pre_by_sc[sc] in cell_props.index
+        and rna_post_by_sc[sc] in cell_props.index
     ]
-    if valid_rna:
-        _sc_rna, pre_ids_rna_filt, post_ids_rna_filt = zip(*valid_rna, strict=False)
+
+    if common_subjects:
+        pre_ids_rna_filt = [rna_pre_by_sc[sc] for sc in common_subjects]
+        post_ids_rna_filt = [rna_post_by_sc[sc] for sc in common_subjects]
         delta_cell_props = (
-            cell_props.loc[list(post_ids_rna_filt)].values
-            - cell_props.loc[list(pre_ids_rna_filt)].values
+            cell_props.loc[post_ids_rna_filt].values - cell_props.loc[pre_ids_rna_filt].values
         )
     else:
         from dnamrnaseq2026.preprocessing.cell_type_correction import CELL_TYPE_COLS as _CT
-        delta_cell_props = np.zeros((len(paired_subjects), len(_CT)))
+
+        common_subjects = list(paired_subjects)
+        delta_cell_props = np.zeros((len(common_subjects), len(_CT)))
+
     delta_cell_props_df = pd.DataFrame(
         delta_cell_props,
-        index=paired_subjects,
+        index=common_subjects,
         columns=cell_props.columns,
     )
-    pdata_paired = pdata_aug.loc[pre_ids_rna[:len(paired_subjects)]].copy()
-    pdata_paired.index = pd.Index(paired_subjects)
 
-    logger.info("Running CellDMC DELTA contrast (%d paired subjects).", len(paired_subjects))
+    # pdata_paired is built by label-based lookup on the pdata_aug index
+    # (AMC-IDs == Subcode).  We use the PRE-visit row for each subject as
+    # the representative metadata row (consistent with the original intent),
+    # then replace the index with the subject Subcode so downstream code can
+    # key on subject ID rather than sample ID.
+    # NOTE: pdata_aug is indexed by AMC-ID; the PRE-visit AMC-ID per subject
+    # is the row where Visit matches a pre-visit label.  We extract it from
+    # rna_pre_by_sc (which maps Subcode -> PRE AMC-ID index value) so the
+    # join is explicit and subject-order-preserving.
+    if common_subjects and common_subjects[0] in rna_pre_by_sc:
+        pre_amc_ids = [rna_pre_by_sc[sc] for sc in common_subjects]
+        pdata_paired = pdata_aug.loc[pre_amc_ids].copy()
+    else:
+        # Fallback: use pdata_aug rows matching common_subjects directly
+        # (valid when pdata_aug index IS the Subcode).
+        pdata_paired = pdata_aug.loc[common_subjects].copy()
+    pdata_paired.index = pd.Index(common_subjects)
+
+    # Rebuild delta_m to cover only common_subjects (the DNAm pairing may
+    # have included subjects without valid RNA / cell_props).
+    if len(common_subjects) < len(paired_subjects):
+        logger.warning(
+            "Restricting delta_m to %d common subjects (DNAm paired: %d). "
+            "Subjects dropped due to missing RNA / cell_props: %s",
+            len(common_subjects),
+            len(paired_subjects),
+            sorted(set(paired_subjects) - set(common_subjects)),
+        )
+        dnam_pre_by_sc: dict[str, str] = dict(zip(paired_subjects, pre_ids_dnam, strict=False))
+        dnam_post_by_sc: dict[str, str] = dict(zip(paired_subjects, post_ids_dnam, strict=False))
+        pre_dnam_common = [dnam_pre_by_sc[sc] for sc in common_subjects]
+        post_dnam_common = [dnam_post_by_sc[sc] for sc in common_subjects]
+        delta_m, _ = build_paired_delta(
+            m_matrix,
+            cpg_ids,
+            pre_dnam_common,
+            post_dnam_common,
+            list(bvals_df.columns),
+        )
+
+    logger.info("Running CellDMC DELTA contrast (%d paired subjects).", len(common_subjects))
     celldmc_delta = run_celldmc(
         delta_m,
         cpg_ids,
@@ -191,19 +250,18 @@ def main() -> None:
         gene_ids = list(log_cpm.index)
         rna_matrix = log_cpm.values.astype(np.float64)
 
-        corrected_delta_m = residualise_on_cell_props(
-            delta_m, delta_cell_props_df, paired_subjects
-        )
+        corrected_delta_m = residualise_on_cell_props(delta_m, delta_cell_props_df, common_subjects)
         idx = list(pdata_aug.index)
-        # Use RNA-based IDs for RNA-seq delta
-        _pre_rna = pre_ids_rna[:len(paired_subjects)]
-        _post_rna = post_ids_rna[:len(paired_subjects)]
+        # Use RNA-based IDs for RNA-seq delta; keyed on common_subjects so
+        # alignment is by subject ID, not by positional slice.
+        _pre_rna = [rna_pre_by_sc[sc] for sc in common_subjects if sc in rna_pre_by_sc]
+        _post_rna = [rna_post_by_sc[sc] for sc in common_subjects if sc in rna_post_by_sc]
         delta_rna = (
             rna_matrix[:, [idx.index(s) for s in _post_rna]]
             - rna_matrix[:, [idx.index(s) for s in _pre_rna]]
         )
         corrected_delta_rna = residualise_on_cell_props(
-            delta_rna, delta_cell_props_df, paired_subjects
+            delta_rna, delta_cell_props_df, common_subjects
         )
 
         rescue = rescue_check_1_2_5(
@@ -237,13 +295,15 @@ def _write_results_md(
     # Count significant CpGs per cell type at delta
     sig_counts: dict[str, int] = {}
     for ct in CELL_TYPE_COLS:
-        ct_mask = (celldmc_delta["cell_type"] == ct)
+        ct_mask = celldmc_delta["cell_type"] == ct
         sig_mask = celldmc_delta.loc[ct_mask, "q_interaction"].fillna(1.0) < 0.05
         sig_counts[ct] = int(sig_mask.sum())
 
-    state_of_recovery = int(
-        (cross_contrast["cross_contrast_class"] == "state_of_recovery").sum()
-    ) if not cross_contrast.empty else 0
+    state_of_recovery = (
+        int((cross_contrast["cross_contrast_class"] == "state_of_recovery").sum())
+        if not cross_contrast.empty
+        else 0
+    )
 
     rescue_verdict = rescue.get("verdict", "N/A")
     rescue_p = rescue.get("permanova_p", "N/A")

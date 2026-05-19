@@ -65,14 +65,18 @@ def _encode_covariates(df: pd.DataFrame) -> np.ndarray[Any, Any]:
     """
     encoded = df.copy()
     for col in encoded.columns:
-        if encoded[col].dtype == object or str(encoded[col].dtype) == "category":
+        # pandas 2.x may use StringDtype for string columns instead of object;
+        # check via api.types helpers so the guard covers object, category, and
+        # the newer StringDtype without hardcoding dtype names.
+        if not pd.api.types.is_numeric_dtype(encoded[col]):
             from sklearn.preprocessing import LabelEncoder
 
             le = LabelEncoder()
             valid = encoded[col].notna()
             encoded.loc[valid, col] = le.fit_transform(encoded.loc[valid, col].astype(str))
             encoded[col] = pd.to_numeric(encoded[col], errors="coerce")
-    col_means = encoded.mean()
+    # numeric_only=True: skip any residual non-numeric columns during NaN imputation.
+    col_means = encoded.mean(numeric_only=True)
     col_arr: np.ndarray[Any, Any] = encoded.fillna(col_means).fillna(0).values.astype(float)
     return col_arr
 
@@ -526,6 +530,7 @@ def annotate_cross_contrast(
     pd.DataFrame
         Columns: cpg, cell_type, cross_contrast_class.
     """
+
     # Vectorised implementation: set a boolean sig flag per (cpg, cell_type) key
     # then merge across contrasts.  The row-wise lookup approach is O(N^2) and
     # intractable for 292k CpGs.

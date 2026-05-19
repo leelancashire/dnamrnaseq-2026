@@ -390,11 +390,9 @@ def filter_paired_ids(
     else:
         paired_subcodes = []
 
-    pre_rows = (
-        pre_df[pre_df[subcode_col].astype(str).isin(paired_subcodes)].set_index(subcode_col)
-    )
-    post_rows = (
-        post_df[post_df[subcode_col].astype(str).isin(paired_subcodes)].set_index(subcode_col)
+    pre_rows = pre_df[pre_df[subcode_col].astype(str).isin(paired_subcodes)].set_index(subcode_col)
+    post_rows = post_df[post_df[subcode_col].astype(str).isin(paired_subcodes)].set_index(
+        subcode_col
     )
 
     pre_ids: list[str] = []
@@ -416,7 +414,9 @@ def filter_paired_ids(
 
     logger.info(
         "filter_paired_ids: %d paired subjects (%s vs %s).",
-        len(paired_subjects), pre_label, post_label,
+        len(paired_subjects),
+        pre_label,
+        post_label,
     )
     return paired_subjects, pre_ids, post_ids
 
@@ -455,9 +455,7 @@ def filter_paired_ids_rna(
     post_subcodes = set(post_df[subcode_col].astype(str))
     common = sorted(pre_subcodes & post_subcodes)
 
-    pre_by_subcode: dict[str, str] = {
-        str(row[subcode_col]): idx for idx, row in pre_df.iterrows()
-    }
+    pre_by_subcode: dict[str, str] = {str(row[subcode_col]): idx for idx, row in pre_df.iterrows()}
     post_by_subcode: dict[str, str] = {
         str(row[subcode_col]): idx for idx, row in post_df.iterrows()
     }

@@ -59,6 +59,7 @@ def main() -> None:
     if cell_props is None:
         logger.warning("cell_props_emory.csv not found; using pData2 fallback.")
         from dnamrnaseq2026.preprocessing.cell_type_correction import run_epidish_from_pdata
+
         cell_props = run_epidish_from_pdata(pdata)
 
     # Align RNA-seq samples to pdata
@@ -70,9 +71,14 @@ def main() -> None:
     pdata_shared = pdata_shared.loc[cell_props_shared.index]
 
     # (a) PRE DE
-    pre_mask = pdata_shared.get("Visit", pd.Series(dtype=str)).astype(str).str.upper().isin(
-        ["PRE", "PRE-IOP", "BL", "BASELINE", "T0", "0"]
-    ) if "Visit" in pdata_shared.columns else pd.Series(True, index=pdata_shared.index)
+    pre_mask = (
+        pdata_shared.get("Visit", pd.Series(dtype=str))
+        .astype(str)
+        .str.upper()
+        .isin(["PRE", "PRE-IOP", "BL", "BASELINE", "T0", "0"])
+        if "Visit" in pdata_shared.columns
+        else pd.Series(True, index=pdata_shared.index)
+    )
     pdata_pre = pdata_shared[pre_mask]
     pre_pos = [list(pdata_shared.index).index(s) for s in pdata_pre.index]
     logger.info("DE PRE: %d samples.", len(pdata_pre))
@@ -81,9 +87,14 @@ def main() -> None:
     de_pre.to_csv(LATEST_DIR / "de_pre_emory.tsv", sep="\t", index=False)
 
     # (b) POST DE
-    post_mask = pdata_shared.get("Visit", pd.Series(dtype=str)).astype(str).str.upper().isin(
-        ["POST", "POST-IOP", "12W", "T1", "1"]
-    ) if "Visit" in pdata_shared.columns else pd.Series(True, index=pdata_shared.index)
+    post_mask = (
+        pdata_shared.get("Visit", pd.Series(dtype=str))
+        .astype(str)
+        .str.upper()
+        .isin(["POST", "POST-IOP", "12W", "T1", "1"])
+        if "Visit" in pdata_shared.columns
+        else pd.Series(True, index=pdata_shared.index)
+    )
     pdata_post = pdata_shared[post_mask]
     post_pos = [list(pdata_shared.index).index(s) for s in pdata_post.index]
     logger.info("DE POST: %d samples.", len(pdata_post))
@@ -122,8 +133,11 @@ def main() -> None:
     de_delta.to_csv(LATEST_DIR / "de_delta_emory.tsv", sep="\t", index=False)
 
     # Rescue check 1.3.5
-    rescue: dict[str, object] = {"verdict": "SKIPPED", "rescue_passed": False,
-                                  "note": "GSE98793 external data not loaded in this run."}
+    rescue: dict[str, object] = {
+        "verdict": "SKIPPED",
+        "rescue_passed": False,
+        "note": "GSE98793 external data not loaded in this run.",
+    }
     rescue_path = OUT_DIR / "rescue_1_3_5.json"
     rescue_path.write_text(json.dumps(rescue, indent=2, default=str))
 
