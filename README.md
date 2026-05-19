@@ -7,7 +7,9 @@ away from the treatment-resistant-depression inflammatory state."*
 Joint DNAm + RNA-seq multi-omics analysis. Emory + BEST cohorts.
 
 **Status:** Phase 0 complete (2026-05-17). All four go/no-go gates have run against
-real Emory + BEST data. Phase 1 (cell-type correction, CellDMC) can proceed.
+real Emory + BEST data. R-Bioconductor env (EpiDISH + CellDMC) wired via
+`envs/r-bioc.yml` (Snakemake `--use-conda`). Phase 1 re-run underway with real
+cell fractions.
 
 ### Phase 0 gate verdicts (seed=42)
 
@@ -178,13 +180,72 @@ this repo was built from. v2.2 is the *why*; `docs/ANALYSIS_PLAN.md` is the *how
 - Manuscript `figures/` and `supplementary/` live in the repo (code-generated); manuscript prose
   stays in the vault (knowledge layer).
 
+## R-Bioconductor Environment (Phase 1)
+
+Phase 1 cell-type deconvolution and CellDMC require a separate R + Bioconductor
+conda environment. This is intentionally isolated from the Python env (no rpy2)
+to avoid the well-known instability of the rpy2 + Bioconductor stack.
+
+### Architecture: Option 2 (Snakemake --use-conda, R writes CSV, Python reads)
+
+R scripts write CSV outputs. Python rules read them. R and Python do not share
+a process. Snakemake handles env activation per rule.
+
+### Setup
+
+```bash
+# Create the R-bioc env (one-time, 10-30 min; large Bioconductor install):
+conda env create -f envs/r-bioc.yml
+
+# Verify:
+conda activate dnamrnaseq2026-r-bioc
+Rscript -e "library(EpiDISH); library(decoupleR); cat('OK\n')"
+```
+
+### Key package notes
+
+- **EpiDISH 2.16.0** (Bioconductor 3.17 / r43 build). `CellDMC()` is an
+  exported function inside EpiDISH; there is no separate `bioconductor-celldmc`
+  package on bioconda. Installing EpiDISH is sufficient.
+- **centEpicV2 reference panel** ships with the EpiDISH package. No external
+  download is needed.
+- **Bioconductor 3.17** (r43 build suffix) is what resolves for `r-base=4.3`
+  on bioconda. The task brief specified 3.18, but 3.18 requires R 4.4 on
+  bioconda. Pinning to 3.17 is the correct production-safe choice.
+- **bioconductor-decoupler 2.6.0**: R-side decoupleR for TF-activity estimation
+  if R-native GRN references are needed. Python decoupleR (`decoupler-py`) in
+  the main env is the primary route for Steps 1.4/1.5.
+
+### Running Phase 1 rules
+
+```bash
+# Run with Snakemake --use-conda (activates r-bioc env per rule automatically):
+snakemake --use-conda --cores 4 epidish_emory epidish_best
+snakemake --use-conda --cores 4 celldmc_pre_emory celldmc_post_emory
+```
+
+### Smoke test
+
+```bash
+# Activate the r-bioc env, then:
+pytest tests/test_r_bioc_smoke.py -m requires_r_bioc -v
+```
+
+Tests marked `requires_r_bioc` are skipped in default CI (`ci.yml`) and run
+via the separate `r-bioc.yml` CI workflow (weekly schedule or manual trigger).
+
+---
+
 ## CI Status
 
-Two GitHub Actions workflows:
-- `ci.yml` runs on every push/PR: ruff lint + format, mypy strict on `src/`, pytest on
-  synthetic fixtures. Target: <5 min.
-- `smoke-pipeline.yml` runs on push to main + weekly: Snakemake DAG parse + preprocessing
-  stub rules on synthetic data. Target: <10 min.
+Three GitHub Actions workflows:
+- `ci.yml` runs on every push/PR: ruff lint + format, mypy strict on `src/`,
+  pytest on synthetic fixtures (R-bioc tests skipped). Target: <5 min.
+- `smoke-pipeline.yml` runs on push to main + weekly: Snakemake DAG parse +
+  preprocessing stub rules on synthetic data. Target: <10 min.
+- `r-bioc.yml` runs weekly (Sunday 02:00 UTC) or manual trigger: full
+  Bioconductor install + `pytest -m requires_r_bioc`. Target: <60 min.
+  Also triggers on pushes to `infra/**` branches that touch env or R script files.
 
 ---
 

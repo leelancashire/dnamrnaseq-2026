@@ -8,9 +8,9 @@ Rules implemented:
   - step_0_C_epidish_validation: Gate 0-C cell-type deconvolution validation
   - step_0_S_source_domain: Gate 0-S source-domain classifier (Emory vs BEST)
   Phase 1 data loading:
-  - load_emory: RData -> parquet (functional)
+  - load_emory: RData -> parquet + pdata CSV (functional)
   - load_best: RData -> parquet (functional)
-  Phase 1 steps (implemented):
+  Phase 1 steps (implemented, Python-wrapper path via python-scientific env):
   - step_1_1_epidish_emory: Step 1.1 EpiDISH for Emory (full deconvolution)
   - step_1_1_epidish_best: Step 1.1 EpiDISH for BEST (full deconvolution)
   - step_1_2_celldmc_pre_emory: Step 1.2a CellDMC PRE contrast
@@ -21,8 +21,9 @@ Rules implemented:
   - step_1_5_tf_activity: Step 1.5 CollecTRI TF activity
   - step_1_6_regulatory_enrichment: Step 1.6 ENCODE TFBS / EpiMap enrichment
   - step_1_7_replication: Step 1.7 BEST replication
-  Backward-compat aliases:
-  - epidish_emory, epidish_best, celldmc_pre_emory, celldmc_post_emory, celldmc_delta_emory
+  R-direct rules (Snakemake --use-conda r-bioconductor.yaml, write to analysis/latest/):
+  - epidish_emory, epidish_best: EpiDISH via Rscript (centEpicV2, RPC method)
+  - celldmc_pre_emory, celldmc_post_emory, celldmc_delta_emory: CellDMC via Rscript
 """
 
 import os
@@ -83,12 +84,19 @@ rule step_0_S_source_domain:
 # ---------------------------------------------------------------------------
 
 rule load_emory:
-    """Load Emory bVals + pData2, validate sample alignment, write parquet."""
+    """Load Emory bVals + pData2, validate sample alignment, write parquet + pdata CSV.
+
+    Outputs both the beta-value parquet (CpG x sample) and the pData CSV so that
+    downstream CellDMC rules (celldmc_pre_emory, celldmc_post_emory,
+    celldmc_delta_emory) have a single producing rule for pdata_emory.csv.
+    CSV includes all pData2 columns; at minimum: Visit, Response, Age, Sex.
+    """
     input:
         bvals   = str(Path(config["data"]["emory_dnam_dir"]) / "emory.bVals.architecture.RData"),
         pdata   = str(Path(config["data"]["emory_dnam_dir"]) / "emory_pData2.RData"),
     output:
         data    = "analysis/latest/data_emory.parquet",
+        pdata   = "analysis/latest/pdata_emory.csv",
     log:
         "analysis/latest/logs/load_emory.log",
     conda:
@@ -290,52 +298,161 @@ rule step_1_7_replication:
         "python scripts/17_phase1_replication.py > {log} 2>&1"
 
 
-# Convenience aliases for backward-compat: keep old rule names pointing to latest outputs
-rule epidish_emory:
-    """Alias: EpiDISH for Emory (routes to step_1_1_epidish_emory output)."""
-    input:
-        "analysis/2026-05-17-phase-1/1.1/cell_props_emory.csv",
-    output:
-        props = "analysis/latest/cell_props_emory.csv",
-    shell:
-        "cp {input} {output.props}"
+# ---------------------------------------------------------------------------
+# Rule: epidish_emory -- EpiDISH cell-fraction estimation (Phase 1 Step 1.1)
+# Wired to the dnamrnaseq2026-r-bioc conda env via --use-conda.
+# R script writes CSV; Python rules read it. rpy2 is NOT used.
+# ---------------------------------------------------------------------------
 
+rule epidish_emory:
+    """EpiDISH cell-fraction estimation for Emory cohort.
+
+    Calls workflow/scripts/run_epidish.R with the centEpicV2 reference panel
+    (IDOL-optimised, ships with the EpiDISH package -- no external download).
+    Output: sample x cell-type CSV (7 cell types: Bcell, CD4T, CD8T, Gran,
+    Mono, NK, nRBC). Row sums ~1. Variance check included in the R script.
+
+    Architecture: Option 2 (Snakemake --use-conda R env, R writes CSV,
+    Python reads CSV). Chosen over rpy2 for stability.
+    """
+    input:
+        bvals   = "analysis/latest/data_emory.parquet",
+    output:
+        props   = "analysis/latest/cell_props_emory.csv",
+    log:
+        "analysis/latest/logs/epidish_emory.log",
+    conda:
+        "../envs/r-bioconductor.yaml"
+    shell:
+        "Rscript workflow/scripts/run_epidish.R"
+        " --input {input.bvals}"
+        " --output {output.props}"
+        " --ref centEpicV2"
+        " --method RPC"
+        " > {log} 2>&1"
+
+
+# ---------------------------------------------------------------------------
+# Rule: epidish_best -- EpiDISH cell-fraction estimation (Phase 1 Step 1.1)
+# ---------------------------------------------------------------------------
 
 rule epidish_best:
-    """Alias: EpiDISH for BEST (routes to step_1_1_epidish_best output)."""
-    input:
-        "analysis/2026-05-17-phase-1/1.1/cell_props_best.csv",
-    output:
-        props = "analysis/latest/cell_props_best.csv",
-    shell:
-        "cp {input} {output.props}"
+    """EpiDISH cell-fraction estimation for BEST cohort.
 
+    Same reference panel (centEpicV2) and method (RPC) as Emory for
+    cross-cohort comparability. See epidish_emory for architecture notes.
+    """
+    input:
+        bvals   = "analysis/latest/data_best.parquet",
+    output:
+        props   = "analysis/latest/cell_props_best.csv",
+    log:
+        "analysis/latest/logs/epidish_best.log",
+    conda:
+        "../envs/r-bioconductor.yaml"
+    shell:
+        "Rscript workflow/scripts/run_epidish.R"
+        " --input {input.bvals}"
+        " --output {output.props}"
+        " --ref centEpicV2"
+        " --method RPC"
+        " > {log} 2>&1"
+
+
+# ---------------------------------------------------------------------------
+# Rules: CellDMC (Phase 1 Step 1.2)
+# CellDMC() is exported from EpiDISH -- no separate package needed.
+# Three contrasts: PRE-IOP, POST-IOP, and within-subject delta.
+# pdata_emory.csv is produced by the load_emory rule (output.pdata).
+# The load_emory rule is the single authoritative producer of this file.
+# ---------------------------------------------------------------------------
 
 rule celldmc_pre_emory:
-    """Alias: CellDMC PRE (routes to step_1_2 output)."""
+    """CellDMC response x cell-type interaction at PRE-IOP for Emory.
+
+    Fits: M_cpg ~ Response + cell_type_j + Response:cell_type_j + Age + Sex
+    Interaction term identifies cell-type-specific DMPs for Treatment Response.
+    Uses real EpiDISH cell fractions from epidish_emory (not pData2 fallback).
+    """
     input:
-        "analysis/2026-05-17-phase-1/1.2/celldmc_pre_emory.tsv",
+        bvals   = "analysis/latest/data_emory.parquet",
+        props   = "analysis/latest/cell_props_emory.csv",
+        pdata   = "analysis/latest/pdata_emory.csv",
     output:
         results = "analysis/latest/celldmc_pre_emory.tsv",
+    log:
+        "analysis/latest/logs/celldmc_pre_emory.log",
+    conda:
+        "../envs/r-bioconductor.yaml"
+    threads: 4
     shell:
-        "cp {input} {output.results}"
+        "Rscript workflow/scripts/run_celldmc.R"
+        " --bvals  {input.bvals}"
+        " --fracs  {input.props}"
+        " --pdata  {input.pdata}"
+        " --pheno  Response"
+        " --visit  PRE_IOP"
+        " --covars Age,Sex"
+        " --output {output.results}"
+        " --fdr    0.05"
+        " --ncore  {threads}"
+        " > {log} 2>&1"
 
 
 rule celldmc_post_emory:
-    """Alias: CellDMC POST (routes to step_1_2 output)."""
+    """CellDMC response x cell-type interaction at POST-IOP for Emory."""
     input:
-        "analysis/2026-05-17-phase-1/1.2/celldmc_post_emory.tsv",
+        bvals   = "analysis/latest/data_emory.parquet",
+        props   = "analysis/latest/cell_props_emory.csv",
+        pdata   = "analysis/latest/pdata_emory.csv",
     output:
         results = "analysis/latest/celldmc_post_emory.tsv",
+    log:
+        "analysis/latest/logs/celldmc_post_emory.log",
+    conda:
+        "../envs/r-bioconductor.yaml"
+    threads: 4
     shell:
-        "cp {input} {output.results}"
+        "Rscript workflow/scripts/run_celldmc.R"
+        " --bvals  {input.bvals}"
+        " --fracs  {input.props}"
+        " --pdata  {input.pdata}"
+        " --pheno  Response"
+        " --visit  POST_IOP"
+        " --covars Age,Sex"
+        " --output {output.results}"
+        " --fdr    0.05"
+        " --ncore  {threads}"
+        " > {log} 2>&1"
 
 
 rule celldmc_delta_emory:
-    """Alias: CellDMC delta (routes to step_1_2 output)."""
+    """CellDMC response x cell-type on within-subject delta (POST - PRE) for Emory.
+
+    Uses all visits (--visit ALL) because the delta is a per-subject single row.
+    The R script subsets to paired subjects; the pdata must include a column
+    that enables paired matching (Subject_ID or equivalent).
+    """
     input:
-        "analysis/2026-05-17-phase-1/1.2/celldmc_delta_emory.tsv",
+        bvals   = "analysis/latest/data_emory.parquet",
+        props   = "analysis/latest/cell_props_emory.csv",
+        pdata   = "analysis/latest/pdata_emory.csv",
     output:
         results = "analysis/latest/celldmc_delta_emory.tsv",
+    log:
+        "analysis/latest/logs/celldmc_delta_emory.log",
+    conda:
+        "../envs/r-bioconductor.yaml"
+    threads: 4
     shell:
-        "cp {input} {output.results}"
+        "Rscript workflow/scripts/run_celldmc.R"
+        " --bvals  {input.bvals}"
+        " --fracs  {input.props}"
+        " --pdata  {input.pdata}"
+        " --pheno  Response"
+        " --visit  ALL"
+        " --covars Age,Sex"
+        " --output {output.results}"
+        " --fdr    0.05"
+        " --ncore  {threads}"
+        " > {log} 2>&1"
