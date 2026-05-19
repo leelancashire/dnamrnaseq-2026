@@ -238,15 +238,11 @@ def build_corrected_paired_delta(
 
     # residualise_on_cell_props returns (n_features, n_subjects); transpose to
     # (n_subjects, n_features) so subjects index rows for downstream PCA.
-    corrected_df = pd.DataFrame(
-        corrected.T, index=paired_subject_ids, columns=feature_ids
-    )
+    corrected_df = pd.DataFrame(corrected.T, index=paired_subject_ids, columns=feature_ids)
     return corrected_df
 
 
-def select_top_variance_features(
-    corrected_delta: pd.DataFrame, top_n: int
-) -> pd.DataFrame:
+def select_top_variance_features(corrected_delta: pd.DataFrame, top_n: int) -> pd.DataFrame:
     """Keep the ``top_n`` features with highest variance across subjects.
 
     Mirrors the variance filter applied in the original Gate 0-T
@@ -381,9 +377,7 @@ def run_gate_t_rerun(
 
     pc_scores, pca = run_pca(joint_valid, n_components=n_components)
     cohens_d = compute_cohens_d_per_pc(pc_scores, response_valid)
-    permanova = run_permanova(
-        pc_scores, response_valid, n_permutations=n_permutations, seed=seed
-    )
+    permanova = run_permanova(pc_scores, response_valid, n_permutations=n_permutations, seed=seed)
     hotelling = run_hotelling_t2(pc_scores, response_valid)
     verdict = determine_gate_0t_verdict(permanova, cohens_d)
 

@@ -87,8 +87,12 @@ def main() -> None:
         pdata_out_path = Path(sm.output.pdata)
         pdata_out_path.parent.mkdir(parents=True, exist_ok=True)
         pdata.to_csv(str(pdata_out_path), index=True)
-        logger.info("Written pdata CSV: %s (%d samples x %d columns)",
-                    pdata_out_path, len(pdata), len(pdata.columns))
+        logger.info(
+            "Written pdata CSV: %s (%d samples x %d columns)",
+            pdata_out_path,
+            len(pdata),
+            len(pdata.columns),
+        )
 
 
 main()

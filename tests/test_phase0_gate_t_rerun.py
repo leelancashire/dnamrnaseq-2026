@@ -64,9 +64,7 @@ def synthetic_paired_delta_inputs():
     pre_ids = [f"S{i:02d}_PRE" for i in range(N_SUBJECTS)]
     post_ids = [f"S{i:02d}_POST" for i in range(N_SUBJECTS)]
 
-    delta_cell_props = (
-        cell_props.loc[post_ids].values - cell_props.loc[pre_ids].values
-    )
+    delta_cell_props = cell_props.loc[post_ids].values - cell_props.loc[pre_ids].values
     delta_cell_props_df = pd.DataFrame(
         delta_cell_props, index=paired_subject_ids, columns=cell_types
     )
@@ -167,9 +165,7 @@ class TestTopVarianceFilter:
         reduced = select_top_variance_features(corrected, top_n=50)
         assert reduced.shape == (N_SUBJECTS, 50)
 
-    def test_passthrough_when_top_n_exceeds_features(
-        self, synthetic_paired_delta_inputs
-    ):
+    def test_passthrough_when_top_n_exceeds_features(self, synthetic_paired_delta_inputs):
         from dnamrnaseq2026.preprocessing.gate_t_rerun_celldmc import (
             build_corrected_paired_delta,
             select_top_variance_features,
