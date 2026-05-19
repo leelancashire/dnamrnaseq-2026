@@ -63,9 +63,10 @@ def main() -> None:
         pdata_aug = pd.read_csv(pdata_aug_path, index_col=0)
         # cell_props_raw may be indexed by SentrixID (pData2) or AMC-... (subject_data)
         # Remap to pdata_aug index via SampleName_DNAm if needed
-        if "SampleName_DNAm" in pdata_aug.columns and len(
-            pdata_aug.index.intersection(cell_props_raw.index)
-        ) == 0:
+        if (
+            "SampleName_DNAm" in pdata_aug.columns
+            and len(pdata_aug.index.intersection(cell_props_raw.index)) == 0
+        ):
             dnam_map = pdata_aug["SampleName_DNAm"].dropna()
             cell_props = cell_props_raw.reindex(dnam_map.values).set_axis(dnam_map.index)
             logger.info(
@@ -78,9 +79,8 @@ def main() -> None:
     else:
         logger.warning("Step 1.1 outputs not found; using zero cell fractions.")
         from dnamrnaseq2026.preprocessing.cell_type_correction import CELL_TYPE_COLS as _CT
-        cell_props = pd.DataFrame(
-            np.zeros((len(pdata), len(_CT))), index=pdata.index, columns=_CT
-        )
+
+        cell_props = pd.DataFrame(np.zeros((len(pdata), len(_CT))), index=pdata.index, columns=_CT)
         pdata_aug = pdata.copy()
 
     # Exclude sex-chromosome CpGs
@@ -115,9 +115,14 @@ def main() -> None:
     logger.info("PRE contrast done: %d rows.", len(celldmc_pre))
 
     # --- (b) POST contrast ---
-    post_mask = pdata_aug.get("Visit", pd.Series(dtype=str)).astype(str).str.upper().isin(
-        ["POST", "POST-IOP", "12W", "T1", "1"]
-    ) if "Visit" in pdata_aug.columns else pd.Series(True, index=pdata_aug.index)
+    post_mask = (
+        pdata_aug.get("Visit", pd.Series(dtype=str))
+        .astype(str)
+        .str.upper()
+        .isin(["POST", "POST-IOP", "12W", "T1", "1"])
+        if "Visit" in pdata_aug.columns
+        else pd.Series(True, index=pdata_aug.index)
+    )
     pdata_post = pdata_aug[post_mask]
     post_col_pos = [list(pdata_aug.index).index(s) for s in pdata_post.index]
     m_post = m_matrix[:, post_col_pos]
@@ -155,7 +160,8 @@ def main() -> None:
     # pre/post sample IDs are present in cell_props.  Preserve the sorted
     # order from paired_subjects (DNAm side) to keep delta_m aligned.
     common_subjects = [
-        sc for sc in paired_subjects
+        sc
+        for sc in paired_subjects
         if sc in rna_pre_by_sc
         and rna_pre_by_sc[sc] in cell_props.index
         and rna_post_by_sc[sc] in cell_props.index
@@ -165,11 +171,11 @@ def main() -> None:
         pre_ids_rna_filt = [rna_pre_by_sc[sc] for sc in common_subjects]
         post_ids_rna_filt = [rna_post_by_sc[sc] for sc in common_subjects]
         delta_cell_props = (
-            cell_props.loc[post_ids_rna_filt].values
-            - cell_props.loc[pre_ids_rna_filt].values
+            cell_props.loc[post_ids_rna_filt].values - cell_props.loc[pre_ids_rna_filt].values
         )
     else:
         from dnamrnaseq2026.preprocessing.cell_type_correction import CELL_TYPE_COLS as _CT
+
         common_subjects = list(paired_subjects)
         delta_cell_props = np.zeros((len(common_subjects), len(_CT)))
 
@@ -244,9 +250,7 @@ def main() -> None:
         gene_ids = list(log_cpm.index)
         rna_matrix = log_cpm.values.astype(np.float64)
 
-        corrected_delta_m = residualise_on_cell_props(
-            delta_m, delta_cell_props_df, common_subjects
-        )
+        corrected_delta_m = residualise_on_cell_props(delta_m, delta_cell_props_df, common_subjects)
         idx = list(pdata_aug.index)
         # Use RNA-based IDs for RNA-seq delta; keyed on common_subjects so
         # alignment is by subject ID, not by positional slice.
@@ -291,13 +295,15 @@ def _write_results_md(
     # Count significant CpGs per cell type at delta
     sig_counts: dict[str, int] = {}
     for ct in CELL_TYPE_COLS:
-        ct_mask = (celldmc_delta["cell_type"] == ct)
+        ct_mask = celldmc_delta["cell_type"] == ct
         sig_mask = celldmc_delta.loc[ct_mask, "q_interaction"].fillna(1.0) < 0.05
         sig_counts[ct] = int(sig_mask.sum())
 
-    state_of_recovery = int(
-        (cross_contrast["cross_contrast_class"] == "state_of_recovery").sum()
-    ) if not cross_contrast.empty else 0
+    state_of_recovery = (
+        int((cross_contrast["cross_contrast_class"] == "state_of_recovery").sum())
+        if not cross_contrast.empty
+        else 0
+    )
 
     rescue_verdict = rescue.get("verdict", "N/A")
     rescue_p = rescue.get("permanova_p", "N/A")

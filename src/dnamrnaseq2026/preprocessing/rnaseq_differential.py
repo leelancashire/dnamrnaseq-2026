@@ -57,14 +57,18 @@ def _encode_covariates(df: pd.DataFrame) -> np.ndarray[Any, Any]:
     """
     encoded = df.copy()
     for col in encoded.columns:
-        if encoded[col].dtype == object or str(encoded[col].dtype) == "category":
+        # pandas 2.x may use StringDtype for string columns instead of object;
+        # check via api.types helpers so the guard covers object, category, and
+        # the newer StringDtype without hardcoding dtype names.
+        if not pd.api.types.is_numeric_dtype(encoded[col]):
             from sklearn.preprocessing import LabelEncoder
 
             le = LabelEncoder()
             valid = encoded[col].notna()
             encoded.loc[valid, col] = le.fit_transform(encoded.loc[valid, col].astype(str))
             encoded[col] = pd.to_numeric(encoded[col], errors="coerce")
-    col_means = encoded.mean()
+    # numeric_only=True: skip any residual non-numeric columns during NaN imputation.
+    col_means = encoded.mean(numeric_only=True)
     col_arr: np.ndarray[Any, Any] = encoded.fillna(col_means).fillna(0).values.astype(float)
     return col_arr
 
@@ -100,9 +104,7 @@ def make_cell_frac_pc1(cell_fracs: pd.DataFrame, sample_ids: list[str]) -> np.nd
     cf_vals = cf[available_cols].fillna(0.0).values
     # Guard: if all-zero or constant (e.g. rpy2 fallback), return zeros
     if cf_vals.shape[0] == 0 or np.allclose(cf_vals, 0.0) or np.all(cf_vals == cf_vals[0]):
-        logger.warning(
-            "Cell fraction matrix is constant or empty; returning zeros for PC1."
-        )
+        logger.warning("Cell fraction matrix is constant or empty; returning zeros for PC1.")
         return np.zeros(len(sample_ids))
     scaler = StandardScaler()
     cf_scaled = scaler.fit_transform(cf_vals)

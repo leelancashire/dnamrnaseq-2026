@@ -57,19 +57,21 @@ def _make_pdata_aug(subcodes: list[str], visit_order: str = "sorted") -> pd.Data
     for sc in subcodes:
         for visit in ("PRE-IOP", "POST-IOP"):
             amc_id = f"{sc}-{visit}"
-            rows.append({
-                "Subcode": sc,
-                "Visit": visit,
-                "Response": "R" if subcodes.index(sc) % 2 == 0 else "NR",
-                "SampleName_DNAm": f"SENTRIX-{sc}-{visit[:3]}",
-                "SampleName_RNASeq": amc_id,
-                "Bcell": 0.1,
-                "CD4T": 0.25,
-                "CD8T": 0.15,
-                "Mono": 0.2,
-                "Neu": 0.2,
-                "NK": 0.1,
-            })
+            rows.append(
+                {
+                    "Subcode": sc,
+                    "Visit": visit,
+                    "Response": "R" if subcodes.index(sc) % 2 == 0 else "NR",
+                    "SampleName_DNAm": f"SENTRIX-{sc}-{visit[:3]}",
+                    "SampleName_RNASeq": amc_id,
+                    "Bcell": 0.1,
+                    "CD4T": 0.25,
+                    "CD8T": 0.15,
+                    "Mono": 0.2,
+                    "Neu": 0.2,
+                    "NK": 0.1,
+                }
+            )
     df = pd.DataFrame(rows)
     df.index = df["SampleName_RNASeq"]
     if visit_order == "reversed":
@@ -100,15 +102,12 @@ def _apply_step12_delta_pairing(
     paired_subjects, _, _ = filter_paired_ids(pdata_aug)
     paired_subjects_rna, pre_ids_rna, post_ids_rna = filter_paired_ids_rna(pdata_aug)
 
-    rna_pre_by_sc: dict[str, str] = dict(
-        zip(paired_subjects_rna, pre_ids_rna, strict=False)
-    )
-    rna_post_by_sc: dict[str, str] = dict(
-        zip(paired_subjects_rna, post_ids_rna, strict=False)
-    )
+    rna_pre_by_sc: dict[str, str] = dict(zip(paired_subjects_rna, pre_ids_rna, strict=False))
+    rna_post_by_sc: dict[str, str] = dict(zip(paired_subjects_rna, post_ids_rna, strict=False))
 
     common_subjects = [
-        sc for sc in paired_subjects
+        sc
+        for sc in paired_subjects
         if sc in rna_pre_by_sc
         and rna_pre_by_sc[sc] in cell_props.index
         and rna_post_by_sc[sc] in cell_props.index
@@ -118,8 +117,7 @@ def _apply_step12_delta_pairing(
         pre_ids_rna_filt = [rna_pre_by_sc[sc] for sc in common_subjects]
         post_ids_rna_filt = [rna_post_by_sc[sc] for sc in common_subjects]
         delta_vals = (
-            cell_props.loc[post_ids_rna_filt].values
-            - cell_props.loc[pre_ids_rna_filt].values
+            cell_props.loc[post_ids_rna_filt].values - cell_props.loc[pre_ids_rna_filt].values
         )
     else:
         cell_type_cols = list(cell_props.columns)
@@ -158,12 +156,12 @@ class TestPdataPairedIdBasedJoin:
             pdata_aug, cell_props
         )
 
-        assert list(pdata_paired.index) == common, (
-            "pdata_paired.index must equal common_subjects in the same order"
-        )
-        assert list(delta_cell_props_df.index) == common, (
-            "delta_cell_props_df.index must equal common_subjects in the same order"
-        )
+        assert (
+            list(pdata_paired.index) == common
+        ), "pdata_paired.index must equal common_subjects in the same order"
+        assert (
+            list(delta_cell_props_df.index) == common
+        ), "delta_cell_props_df.index must equal common_subjects in the same order"
 
     def test_out_of_order_subjects_still_correctly_aligned(self) -> None:
         """Core regression: when filter functions return subjects in a different
@@ -185,15 +183,13 @@ class TestPdataPairedIdBasedJoin:
         )
 
         # The index must be exactly common_subjects in order.
-        assert list(pdata_paired.index) == common, (
-            "Out-of-order subjects: pdata_paired.index must match common_subjects exactly"
-        )
+        assert (
+            list(pdata_paired.index) == common
+        ), "Out-of-order subjects: pdata_paired.index must match common_subjects exactly"
         # For each subject, the Response in pdata_paired must be the correct
         # response for THAT subject (not the one positionally adjacent in pdata_aug).
         for sc in common:
-            expected_response = (
-                pdata_aug[pdata_aug["Subcode"] == sc]["Response"].iloc[0]
-            )
+            expected_response = pdata_aug[pdata_aug["Subcode"] == sc]["Response"].iloc[0]
             actual_response = pdata_paired.loc[sc, "Response"]
             assert actual_response == expected_response, (
                 f"Subject {sc}: expected Response={expected_response!r}, "
@@ -219,20 +215,21 @@ class TestPdataPairedIdBasedJoin:
             pdata_aug, cell_props
         )
 
-        assert set(common) == {"SC001", "SC003"}, (
-            "Only subjects with cell_props for both PRE and POST should be included"
-        )
-        assert list(pdata_paired.index) == sorted(common), (
-            "pdata_paired must be indexed by the surviving common_subjects in sorted order"
-        )
+        assert set(common) == {
+            "SC001",
+            "SC003",
+        }, "Only subjects with cell_props for both PRE and POST should be included"
+        assert list(pdata_paired.index) == sorted(
+            common
+        ), "pdata_paired must be indexed by the surviving common_subjects in sorted order"
         assert len(delta_cell_props_df) == 2
 
         # Each subject's pdata_paired row must have the CORRECT Response.
         for sc in common:
             expected = pdata_aug[pdata_aug["Subcode"] == sc]["Response"].iloc[0]
-            assert pdata_paired.loc[sc, "Response"] == expected, (
-                f"{sc}: wrong Response in pdata_paired after subject-drop filtering"
-            )
+            assert (
+                pdata_paired.loc[sc, "Response"] == expected
+            ), f"{sc}: wrong Response in pdata_paired after subject-drop filtering"
 
     def test_delta_cell_props_index_aligns_with_pdata_paired(self) -> None:
         """delta_cell_props_df.index and pdata_paired.index must be identical.
@@ -248,9 +245,9 @@ class TestPdataPairedIdBasedJoin:
             pdata_aug, cell_props
         )
 
-        assert list(delta_cell_props_df.index) == list(pdata_paired.index), (
-            "delta_cell_props_df.index and pdata_paired.index must be identical"
-        )
+        assert list(delta_cell_props_df.index) == list(
+            pdata_paired.index
+        ), "delta_cell_props_df.index and pdata_paired.index must be identical"
 
     def test_delta_cell_props_values_correct_for_each_subject(self) -> None:
         """Each row of delta_cell_props_df must be POST - PRE for THAT subject.
@@ -276,9 +273,7 @@ class TestPdataPairedIdBasedJoin:
         for sc in common:
             pre_id = f"{sc}-PRE-IOP"
             post_id = f"{sc}-POST-IOP"
-            expected_delta_neu = (
-                cell_props.loc[post_id, "Neu"] - cell_props.loc[pre_id, "Neu"]
-            )
+            expected_delta_neu = cell_props.loc[post_id, "Neu"] - cell_props.loc[pre_id, "Neu"]
             actual_delta_neu = float(delta_cell_props_df.loc[sc, "Neu"])
             assert abs(actual_delta_neu - expected_delta_neu) < 1e-9, (
                 f"{sc}: delta Neu mismatch (expected {expected_delta_neu:.6f}, "
