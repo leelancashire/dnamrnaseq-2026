@@ -419,6 +419,34 @@ def load_emory_subject_data(mmvae_dir: Path | None = None) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Convenience wrappers used by Phase 1 entry-point scripts
+# ---------------------------------------------------------------------------
+
+
+def load_emory() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return (bvals_df, subject_data) for the Emory cohort.
+
+    bvals_df: shape (n_cpgs, n_samples), columns are SampleName_DNAm identifiers.
+    subject_data: shape (n_subjects, 8), columns include Subcode, Visit, Response,
+        SampleName_RNASeq, SampleName_DNAm, age, sex, id.
+    """
+    bvals = load_emory_bvals()
+    subj = load_emory_subject_data()
+    return bvals, subj
+
+
+def load_best() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return (bvals_df, pdata2) for the BEST cohort.
+
+    bvals_df: shape (n_cpgs, n_samples), columns are SampleName identifiers.
+    pdata2: shape (n_samples, n_covariates), contains Subcode, Visit columns.
+    """
+    bvals = load_best_bvals()
+    pdata = load_best_pdata2()
+    return bvals, pdata
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point (called by `dnamrnaseq-load` console script)
 # ---------------------------------------------------------------------------
 

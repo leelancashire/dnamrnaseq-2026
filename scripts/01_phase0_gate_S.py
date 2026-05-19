@@ -105,37 +105,33 @@ def main() -> None:
         # BEST RNA-seq columns use {Subcode}-{BL|12W} format,
         # e.g. BEST-307964-BL (Subcode already contains the BEST prefix).
         rnaseq_sample = f"{subcode}-{raw_visit}"
-        best_subject_rows.append({
-            "Subcode": subcode,
-            "Visit": visit_mapped,
-            "Response": response_map.get(str(row.get("Response", "NA")), "NA"),
-            "SampleName_DNAm": dnam_sample,
-            "SampleName_RNASeq": rnaseq_sample,
-        })
+        best_subject_rows.append(
+            {
+                "Subcode": subcode,
+                "Visit": visit_mapped,
+                "Response": response_map.get(str(row.get("Response", "NA")), "NA"),
+                "SampleName_DNAm": dnam_sample,
+                "SampleName_RNASeq": rnaseq_sample,
+            }
+        )
     best_subject_data = pd.DataFrame(best_subject_rows)
 
     # Check BEST RNA-seq column format matches subject data
     logger.info("BEST RNA-seq columns sample: %s", list(best_rnaseq.columns[:3]))
-    logger.info("BEST subject data SampleName_RNASeq sample: %s",
-                list(best_subject_data["SampleName_RNASeq"][:3]))
+    logger.info(
+        "BEST subject data SampleName_RNASeq sample: %s",
+        list(best_subject_data["SampleName_RNASeq"][:3]),
+    )
 
     # Build Emory delta matrix
-    emory_dnam_delta = build_dnam_delta_matrix(
-        emory_bvals, emory_subject_data, top_n_cpgs=5000
-    )
-    emory_rna_delta = build_rnaseq_delta_matrix(
-        emory_rnaseq, emory_subject_data, top_n_genes=2000
-    )
+    emory_dnam_delta = build_dnam_delta_matrix(emory_bvals, emory_subject_data, top_n_cpgs=5000)
+    emory_rna_delta = build_rnaseq_delta_matrix(emory_rnaseq, emory_subject_data, top_n_genes=2000)
     emory_joint = build_joint_delta_matrix(emory_dnam_delta, emory_rna_delta, scale=True)
     logger.info("Emory joint delta: %s", emory_joint.shape)
 
     # Build BEST delta matrix
-    best_dnam_delta = build_dnam_delta_matrix(
-        best_bvals, best_subject_data, top_n_cpgs=5000
-    )
-    best_rna_delta = build_rnaseq_delta_matrix(
-        best_rnaseq, best_subject_data, top_n_genes=2000
-    )
+    best_dnam_delta = build_dnam_delta_matrix(best_bvals, best_subject_data, top_n_cpgs=5000)
+    best_rna_delta = build_rnaseq_delta_matrix(best_rnaseq, best_subject_data, top_n_genes=2000)
     best_joint = build_joint_delta_matrix(best_dnam_delta, best_rna_delta, scale=True)
     logger.info("BEST joint delta: %s", best_joint.shape)
 
@@ -147,8 +143,10 @@ def main() -> None:
             "Inspect best_rnaseq.columns vs best_subject_data.SampleName_RNASeq."
         )
         logger.info("BEST rnaseq cols: %s", list(best_rnaseq.columns[:10]))
-        logger.info("BEST subject SampleName_RNASeq: %s",
-                    list(best_subject_data["SampleName_RNASeq"].unique()[:10]))
+        logger.info(
+            "BEST subject SampleName_RNASeq: %s",
+            list(best_subject_data["SampleName_RNASeq"].unique()[:10]),
+        )
         sys.exit(1)
 
     # Harmonise feature intersection
@@ -160,8 +158,12 @@ def main() -> None:
     max_auc = max(clf_results["lr_mean_auc"], clf_results["rf_mean_auc"])
     verdict = determine_gate_0s_verdict(max_auc)
 
-    logger.info("Gate 0-S verdict: %s (LR AUC=%.4f, RF AUC=%.4f)",
-                verdict, clf_results["lr_mean_auc"], clf_results["rf_mean_auc"])
+    logger.info(
+        "Gate 0-S verdict: %s (LR AUC=%.4f, RF AUC=%.4f)",
+        verdict,
+        clf_results["lr_mean_auc"],
+        clf_results["rf_mean_auc"],
+    )
 
     # Compute importance weights if pass/marginal
     importance_weights = None
@@ -193,12 +195,14 @@ def main() -> None:
         + clf_results["rf_importances"] / clf_results["rf_importances"].sum()
     )
     top20 = combined_importance.nlargest(20)
-    top20_df = pd.DataFrame({
-        "feature": top20.index,
-        "combined_importance": top20.values,
-        "lr_coef": clf_results["lr_coef"][top20.index].values,
-        "rf_importance": clf_results["rf_importances"][top20.index].values,
-    })
+    top20_df = pd.DataFrame(
+        {
+            "feature": top20.index,
+            "combined_importance": top20.values,
+            "lr_coef": clf_results["lr_coef"][top20.index].values,
+            "rf_importance": clf_results["rf_importances"][top20.index].values,
+        }
+    )
     top20_df.to_csv(str(OUT_DIR / "gate_0S_top_shifted_features.csv"), index=False)
 
     # Importance weights CSV
@@ -207,6 +211,7 @@ def main() -> None:
 
     # ROC curve plot
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from sklearn.metrics import roc_curve

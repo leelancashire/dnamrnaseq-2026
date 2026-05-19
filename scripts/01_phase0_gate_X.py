@@ -86,7 +86,7 @@ def main() -> None:
             "gate": "0-X",
             "verdict": "BLOCKED",
             "reason": "GSE98793 expression file not available. "
-                      "Set config.yaml data.external.gse98793 to the local file path.",
+            "Set config.yaml data.external.gse98793 to the local file path.",
         }
         with (OUT_DIR / "gate_0X_centroids.json").open("w") as fh:
             json.dump(out, fh, indent=2)
@@ -100,6 +100,7 @@ def main() -> None:
 
     # Build Emory PRE baseline matrix (one sample per subject)
     import pandas as pd
+
     pre_rows = subject_data[subject_data["Visit"] == "PRE-IOP"].copy()
     pre_cols = [c for c in pre_rows["SampleName_RNASeq"].values if c in emory_rnaseq.columns]
     emory_pre = emory_rnaseq[pre_cols]
@@ -216,11 +217,13 @@ def main() -> None:
     emory_resp = centroids["emory_response"]
     r_samples = [s for s in emory_resp[emory_resp == "R"].index if s in emory_filt.columns]
     nr_samples = [s for s in emory_resp[emory_resp == "NR"].index if s in emory_filt.columns]
-    genes_df = pd.DataFrame({
-        "gene": top_genes,
-        "emory_r_mean": emory_filt.loc[top_genes, r_samples].mean(axis=1).values,
-        "emory_nr_mean": emory_filt.loc[top_genes, nr_samples].mean(axis=1).values,
-    })
+    genes_df = pd.DataFrame(
+        {
+            "gene": top_genes,
+            "emory_r_mean": emory_filt.loc[top_genes, r_samples].mean(axis=1).values,
+            "emory_nr_mean": emory_filt.loc[top_genes, nr_samples].mean(axis=1).values,
+        }
+    )
     genes_df.to_csv(str(OUT_DIR / "gate_0X_genes_used.csv"), index=False)
 
     # PCA projection visualisation
@@ -233,6 +236,7 @@ def main() -> None:
     )
 
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
@@ -246,19 +250,35 @@ def main() -> None:
     for resp, color, marker in [("R", "#2196F3", "o"), ("NR", "#F44336", "^")]:
         mask = emory_pcs["Response"] == resp
         ax.scatter(
-            emory_pcs.loc[mask, "PC1"], emory_pcs.loc[mask, "PC2"],
-            c=color, marker=marker, s=50, alpha=0.6, label=f"Emory {resp}",
+            emory_pcs.loc[mask, "PC1"],
+            emory_pcs.loc[mask, "PC2"],
+            c=color,
+            marker=marker,
+            s=50,
+            alpha=0.6,
+            label=f"Emory {resp}",
         )
 
     # GSE points
     trd_gse = gse_pcs[gse_pcs["is_trd"]]
     ctrl_gse = gse_pcs[~gse_pcs["is_trd"]]
     ax.scatter(
-        trd_gse["PC1"], trd_gse["PC2"], c="#FF9800", marker="s", s=30, alpha=0.5, label="GSE TRD",
+        trd_gse["PC1"],
+        trd_gse["PC2"],
+        c="#FF9800",
+        marker="s",
+        s=30,
+        alpha=0.5,
+        label="GSE TRD",
     )
     ax.scatter(
-        ctrl_gse["PC1"], ctrl_gse["PC2"],
-        c="#4CAF50", marker="D", s=30, alpha=0.5, label="GSE ctrl",
+        ctrl_gse["PC1"],
+        ctrl_gse["PC2"],
+        c="#4CAF50",
+        marker="D",
+        s=30,
+        alpha=0.5,
+        label="GSE ctrl",
     )
 
     # Centroid markers
@@ -269,10 +289,17 @@ def main() -> None:
         "gse_control_centroid": "#4CAF50",
     }
     for cname, coords in centroid_pcs.items():
-        ax.scatter(coords[0], coords[1],
-                   c=centroid_colors.get(cname, "black"),
-                   marker="*", s=400, zorder=6, edgecolors="black", linewidth=1.0,
-                   label=f"{cname.replace('_centroid','')}")
+        ax.scatter(
+            coords[0],
+            coords[1],
+            c=centroid_colors.get(cname, "black"),
+            marker="*",
+            s=400,
+            zorder=6,
+            edgecolors="black",
+            linewidth=1.0,
+            label=f"{cname.replace('_centroid','')}",
+        )
 
     ax.set_xlabel(f"PC1 ({ev[0]*100:.1f}%)")
     ax.set_ylabel(f"PC2 ({ev[1]*100:.1f}%)" if len(ev) > 1 else "PC2")

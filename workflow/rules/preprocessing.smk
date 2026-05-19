@@ -7,14 +7,22 @@ Rules implemented:
   - step_0_T_pca_delta: Gate 0-T PCA of Emory paired delta-vectors
   - step_0_C_epidish_validation: Gate 0-C cell-type deconvolution validation
   - step_0_S_source_domain: Gate 0-S source-domain classifier (Emory vs BEST)
-  Phase 1 (stubs):
+  Phase 1 data loading:
   - load_emory: RData -> parquet (functional)
   - load_best: RData -> parquet (functional)
-  - epidish_emory: EpiDISH cell-type fraction estimation (stub)
-  - epidish_best: EpiDISH cell-type fraction estimation (stub)
-  - celldmc_pre_emory: CellDMC at PRE-IOP (stub)
-  - celldmc_post_emory: CellDMC at POST-IOP (stub)
-  - celldmc_delta_emory: CellDMC on within-subject delta (stub)
+  Phase 1 steps (implemented):
+  - step_1_1_epidish_emory: Step 1.1 EpiDISH for Emory (full deconvolution)
+  - step_1_1_epidish_best: Step 1.1 EpiDISH for BEST (full deconvolution)
+  - step_1_2_celldmc_pre_emory: Step 1.2a CellDMC PRE contrast
+  - step_1_2_celldmc_post_emory: Step 1.2b CellDMC POST contrast
+  - step_1_2_celldmc_delta_emory: Step 1.2c CellDMC delta + rescue 1.2.5
+  - step_1_3_rnaseq_de_emory: Step 1.3 RNA-seq DE + rescue 1.3.5
+  - step_1_4_pathway_activity: Step 1.4 PROGENy + Reactome/GSVA
+  - step_1_5_tf_activity: Step 1.5 CollecTRI TF activity
+  - step_1_6_regulatory_enrichment: Step 1.6 ENCODE TFBS / EpiMap enrichment
+  - step_1_7_replication: Step 1.7 BEST replication
+  Backward-compat aliases:
+  - epidish_emory, epidish_best, celldmc_pre_emory, celldmc_post_emory, celldmc_delta_emory
 """
 
 import os
@@ -109,71 +117,225 @@ rule load_best:
 
 
 # ---------------------------------------------------------------------------
-# Rule: epidish_emory — EpiDISH cell-fraction estimation
-# TODO: implement in Phase 1
+# Phase 1 rules
 # ---------------------------------------------------------------------------
 
-rule epidish_emory:
-    """EpiDISH cell-fraction estimation for Emory cohort (stub)."""
-    input:
-        bvals   = "analysis/latest/data_emory.parquet",
+# Step 1.1: EpiDISH full deconvolution
+
+rule step_1_1_epidish_emory:
+    """Step 1.1: EpiDISH cell-fraction estimation for Emory cohort."""
     output:
-        props   = "analysis/latest/cell_props_emory.csv",
+        props       = "analysis/2026-05-17-phase-1/1.1/cell_props_emory.csv",
+        pdata_aug   = "analysis/2026-05-17-phase-1/1.1/pdata_emory_with_epidish.csv",
+        results_md  = "analysis/2026-05-17-phase-1/1.1/results.md",
     log:
-        "analysis/latest/logs/epidish_emory.log",
+        "analysis/2026-05-17-phase-1/1.1/step_1_1_emory.log",
+    conda:
+        "../envs/python-scientific.yaml"
     shell:
-        "echo 'TODO: implement EpiDISH for Emory' && touch {output.props}"
+        "python scripts/11_phase1_epidish.py > {log} 2>&1"
 
 
-# ---------------------------------------------------------------------------
-# Rule: epidish_best — EpiDISH cell-fraction estimation
-# TODO: implement in Phase 1
-# ---------------------------------------------------------------------------
+rule step_1_1_epidish_best:
+    """Step 1.1: EpiDISH cell-fraction estimation for BEST cohort."""
+    output:
+        props       = "analysis/2026-05-17-phase-1/1.1/cell_props_best.csv",
+        pdata_aug   = "analysis/2026-05-17-phase-1/1.1/pdata_best_with_epidish.csv",
+    log:
+        "analysis/2026-05-17-phase-1/1.1/step_1_1_best.log",
+    conda:
+        "../envs/python-scientific.yaml"
+    shell:
+        "python scripts/11_phase1_epidish.py > {log} 2>&1"
+
+
+# Step 1.2: CellDMC three-contrast + rescue check 1.2.5
+
+rule step_1_2_celldmc_pre_emory:
+    """Step 1.2a: CellDMC at PRE-IOP for Emory."""
+    input:
+        props   = "analysis/2026-05-17-phase-1/1.1/cell_props_emory.csv",
+        pdata   = "analysis/2026-05-17-phase-1/1.1/pdata_emory_with_epidish.csv",
+    output:
+        results = "analysis/2026-05-17-phase-1/1.2/celldmc_pre_emory.tsv",
+    log:
+        "analysis/2026-05-17-phase-1/1.2/step_1_2_pre.log",
+    conda:
+        "../envs/python-scientific.yaml"
+    shell:
+        "python scripts/12_phase1_celldmc.py > {log} 2>&1"
+
+
+rule step_1_2_celldmc_post_emory:
+    """Step 1.2b: CellDMC at POST-IOP for Emory."""
+    input:
+        props   = "analysis/2026-05-17-phase-1/1.1/cell_props_emory.csv",
+        pdata   = "analysis/2026-05-17-phase-1/1.1/pdata_emory_with_epidish.csv",
+    output:
+        results = "analysis/2026-05-17-phase-1/1.2/celldmc_post_emory.tsv",
+    log:
+        "analysis/2026-05-17-phase-1/1.2/step_1_2_post.log",
+    conda:
+        "../envs/python-scientific.yaml"
+    shell:
+        "python scripts/12_phase1_celldmc.py > {log} 2>&1"
+
+
+rule step_1_2_celldmc_delta_emory:
+    """Step 1.2c: CellDMC delta + rescue check 1.2.5 for Emory."""
+    input:
+        pre     = "analysis/2026-05-17-phase-1/1.2/celldmc_pre_emory.tsv",
+        post    = "analysis/2026-05-17-phase-1/1.2/celldmc_post_emory.tsv",
+    output:
+        results     = "analysis/2026-05-17-phase-1/1.2/celldmc_delta_emory.tsv",
+        rescue      = "analysis/2026-05-17-phase-1/1.2/rescue_1_2_5.json",
+        results_md  = "analysis/2026-05-17-phase-1/1.2/results.md",
+    log:
+        "analysis/2026-05-17-phase-1/1.2/step_1_2_delta.log",
+    conda:
+        "../envs/python-scientific.yaml"
+    shell:
+        "python scripts/12_phase1_celldmc.py > {log} 2>&1"
+
+
+# Step 1.3: Cell-type-corrected RNA-seq DE + rescue check 1.3.5
+
+rule step_1_3_rnaseq_de_emory:
+    """Step 1.3: Cell-type-corrected RNA-seq DE at PRE, POST, delta + rescue 1.3.5."""
+    input:
+        props   = "analysis/2026-05-17-phase-1/1.1/cell_props_emory.csv",
+        pdata   = "analysis/2026-05-17-phase-1/1.1/pdata_emory_with_epidish.csv",
+    output:
+        de_pre      = "analysis/2026-05-17-phase-1/1.3/de_pre_emory.tsv",
+        de_post     = "analysis/2026-05-17-phase-1/1.3/de_post_emory.tsv",
+        de_delta    = "analysis/2026-05-17-phase-1/1.3/de_delta_emory.tsv",
+        rescue      = "analysis/2026-05-17-phase-1/1.3/rescue_1_3_5.json",
+        results_md  = "analysis/2026-05-17-phase-1/1.3/results.md",
+    log:
+        "analysis/2026-05-17-phase-1/1.3/step_1_3.log",
+    conda:
+        "../envs/python-scientific.yaml"
+    shell:
+        "python scripts/13_phase1_rnaseq_de.py > {log} 2>&1"
+
+
+# Step 1.4: Pathway activity (PROGENy + Reactome/GSVA)
+
+rule step_1_4_pathway_activity:
+    """Step 1.4: decoupleR pathway activity (PROGENy + Reactome/GSVA)."""
+    input:
+        pdata   = "analysis/2026-05-17-phase-1/1.1/pdata_emory_with_epidish.csv",
+    output:
+        results_md  = "analysis/2026-05-17-phase-1/1.4/results.md",
+        test_tsv    = "analysis/2026-05-17-phase-1/1.4/pathway_response_test.tsv",
+    log:
+        "analysis/2026-05-17-phase-1/1.4/step_1_4.log",
+    conda:
+        "../envs/python-scientific.yaml"
+    shell:
+        "python scripts/14_phase1_pathway_activity.py > {log} 2>&1"
+
+
+# Step 1.5: TF activity (CollecTRI)
+
+rule step_1_5_tf_activity:
+    """Step 1.5: decoupleR TF activity (CollecTRI)."""
+    input:
+        pdata   = "analysis/2026-05-17-phase-1/1.1/pdata_emory_with_epidish.csv",
+    output:
+        results_md  = "analysis/2026-05-17-phase-1/1.5/results.md",
+        test_tsv    = "analysis/2026-05-17-phase-1/1.5/tf_response_test.tsv",
+        priority    = "analysis/2026-05-17-phase-1/1.5/priority_tf_table.tsv",
+    log:
+        "analysis/2026-05-17-phase-1/1.5/step_1_5.log",
+    conda:
+        "../envs/python-scientific.yaml"
+    shell:
+        "python scripts/15_phase1_tf_activity.py > {log} 2>&1"
+
+
+# Step 1.6: Regulatory enrichment (ENCODE TFBS / EpiMap)
+
+rule step_1_6_regulatory_enrichment:
+    """Step 1.6: ENCODE TFBS / EpiMap enrichment on CellDMC delta CpGs."""
+    input:
+        celldmc = "analysis/2026-05-17-phase-1/1.2/celldmc_delta_emory.tsv",
+    output:
+        enrichment  = "analysis/2026-05-17-phase-1/1.6/regulatory_enrichment.tsv",
+        results_md  = "analysis/2026-05-17-phase-1/1.6/results.md",
+    log:
+        "analysis/2026-05-17-phase-1/1.6/step_1_6.log",
+    conda:
+        "../envs/python-scientific.yaml"
+    shell:
+        "python scripts/16_phase1_regulatory_enrichment.py > {log} 2>&1"
+
+
+# Step 1.7: BEST replication
+
+rule step_1_7_replication:
+    """Step 1.7: BEST replication of Emory CellDMC delta-significant CpGs."""
+    input:
+        celldmc     = "analysis/2026-05-17-phase-1/1.2/celldmc_delta_emory.tsv",
+        props_best  = "analysis/2026-05-17-phase-1/1.1/cell_props_best.csv",
+    output:
+        overall         = "analysis/2026-05-17-phase-1/1.7/replication_overall.tsv",
+        summary_json    = "analysis/2026-05-17-phase-1/1.7/replication_summary.json",
+        results_md      = "analysis/2026-05-17-phase-1/1.7/results.md",
+    log:
+        "analysis/2026-05-17-phase-1/1.7/step_1_7.log",
+    conda:
+        "../envs/python-scientific.yaml"
+    shell:
+        "python scripts/17_phase1_replication.py > {log} 2>&1"
+
+
+# Convenience aliases for backward-compat: keep old rule names pointing to latest outputs
+rule epidish_emory:
+    """Alias: EpiDISH for Emory (routes to step_1_1_epidish_emory output)."""
+    input:
+        "analysis/2026-05-17-phase-1/1.1/cell_props_emory.csv",
+    output:
+        props = "analysis/latest/cell_props_emory.csv",
+    shell:
+        "cp {input} {output.props}"
+
 
 rule epidish_best:
-    """EpiDISH cell-fraction estimation for BEST cohort (stub)."""
+    """Alias: EpiDISH for BEST (routes to step_1_1_epidish_best output)."""
     input:
-        bvals   = "analysis/latest/data_best.parquet",
+        "analysis/2026-05-17-phase-1/1.1/cell_props_best.csv",
     output:
-        props   = "analysis/latest/cell_props_best.csv",
-    log:
-        "analysis/latest/logs/epidish_best.log",
+        props = "analysis/latest/cell_props_best.csv",
     shell:
-        "echo 'TODO: implement EpiDISH for BEST' && touch {output.props}"
+        "cp {input} {output.props}"
 
-
-# ---------------------------------------------------------------------------
-# Stub rules: CellDMC (to be implemented Phase 1.2)
-# ---------------------------------------------------------------------------
 
 rule celldmc_pre_emory:
-    """CellDMC at PRE-IOP for Emory (stub)."""
+    """Alias: CellDMC PRE (routes to step_1_2 output)."""
     input:
-        bvals   = "analysis/latest/data_emory.parquet",
-        props   = "analysis/latest/cell_props_emory.csv",
+        "analysis/2026-05-17-phase-1/1.2/celldmc_pre_emory.tsv",
     output:
         results = "analysis/latest/celldmc_pre_emory.tsv",
     shell:
-        "echo 'TODO: CellDMC PRE-IOP Emory' && touch {output.results}"
+        "cp {input} {output.results}"
 
 
 rule celldmc_post_emory:
-    """CellDMC at POST-IOP for Emory (stub)."""
+    """Alias: CellDMC POST (routes to step_1_2 output)."""
     input:
-        bvals   = "analysis/latest/data_emory.parquet",
-        props   = "analysis/latest/cell_props_emory.csv",
+        "analysis/2026-05-17-phase-1/1.2/celldmc_post_emory.tsv",
     output:
         results = "analysis/latest/celldmc_post_emory.tsv",
     shell:
-        "echo 'TODO: CellDMC POST-IOP Emory' && touch {output.results}"
+        "cp {input} {output.results}"
 
 
 rule celldmc_delta_emory:
-    """CellDMC on within-subject delta for Emory (stub)."""
+    """Alias: CellDMC delta (routes to step_1_2 output)."""
     input:
-        pre     = "analysis/latest/celldmc_pre_emory.tsv",
-        post    = "analysis/latest/celldmc_post_emory.tsv",
+        "analysis/2026-05-17-phase-1/1.2/celldmc_delta_emory.tsv",
     output:
         results = "analysis/latest/celldmc_delta_emory.tsv",
     shell:
-        "echo 'TODO: CellDMC delta Emory' && touch {output.results}"
+        "cp {input} {output.results}"

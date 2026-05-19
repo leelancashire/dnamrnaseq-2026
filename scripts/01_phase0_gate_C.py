@@ -83,6 +83,7 @@ def main() -> None:
 
     # Delta-cell-fraction histograms
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
@@ -123,13 +124,17 @@ def main() -> None:
     print("=" * 60)
     print(f"Paired subjects: {out['n_paired']}")
     print("Validation 1 (EpiDISH cross-check): SKIPPED (pData2 = reference)")
-    print(f"Validation 2 (Δ-cell SD): "
-          f"Mono={out['validation_2_mono_sd']:.4f}, "
-          f"Neu={out['validation_2_neu_sd']:.4f} "
-          f"(threshold=0.02) -> {'PASS' if out['validation_2_pass'] else 'FAIL'}")
-    print(f"Validation 3 (delta_Mono x delta_N2LR Pearson r): "
-          f"r={out['mono_n2lr_pearson_r']:.4f} (p={out['mono_n2lr_pearson_p']:.4f}) "
-          f"(threshold=0.30) -> {'PASS' if out['validation_3_pass'] else 'FAIL'}")
+    print(
+        f"Validation 2 (Δ-cell SD): "
+        f"Mono={out['validation_2_mono_sd']:.4f}, "
+        f"Neu={out['validation_2_neu_sd']:.4f} "
+        f"(threshold=0.02) -> {'PASS' if out['validation_2_pass'] else 'FAIL'}"
+    )
+    print(
+        f"Validation 3 (delta_Mono x delta_N2LR Pearson r): "
+        f"r={out['mono_n2lr_pearson_r']:.4f} (p={out['mono_n2lr_pearson_p']:.4f}) "
+        f"(threshold=0.30) -> {'PASS' if out['validation_3_pass'] else 'FAIL'}"
+    )
     print(f"Verdict: {verdict}")
     print("=" * 60)
 
