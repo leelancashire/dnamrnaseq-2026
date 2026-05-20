@@ -73,10 +73,26 @@ def main() -> None:
         "Sample alignment: %d/%d bVals samples found in pData2", len(overlap), len(bvals_samples)
     )
 
-    # Write to parquet (bVals transposed: samples x CpGs for easier downstream use)
+    # Write bVals parquet (transposed: samples x CpGs for easier downstream use)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     bvals.T.to_parquet(str(output_path))
     logger.info("Written: %s", output_path)
+
+    # Write pData CSV if the rule declares a pdata output.
+    # The CellDMC rules (celldmc_pre_emory, celldmc_post_emory, celldmc_delta_emory)
+    # declare pdata_emory.csv as input; this is the single producing rule for that file.
+    # CSV schema includes all pData2 columns so downstream R scripts can select
+    # whichever covariates they need (at minimum: Visit, Response, Age, Sex).
+    if hasattr(sm.output, "pdata"):
+        pdata_out_path = Path(sm.output.pdata)
+        pdata_out_path.parent.mkdir(parents=True, exist_ok=True)
+        pdata.to_csv(str(pdata_out_path), index=True)
+        logger.info(
+            "Written pdata CSV: %s (%d samples x %d columns)",
+            pdata_out_path,
+            len(pdata),
+            len(pdata.columns),
+        )
 
 
 main()
