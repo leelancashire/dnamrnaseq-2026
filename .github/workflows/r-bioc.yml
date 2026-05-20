@@ -1,0 +1,98 @@
+name: R-Bioc smoke test
+
+# Bioconductor installation takes 10-30 min in CI. This workflow runs separately
+# from the default ci.yml to avoid blocking every-PR feedback loops.
+#
+# Triggers:
+#   - Weekly schedule (Sunday 02:00 UTC): catch upstream Bioconductor/conda drift
+#   - Manual trigger (workflow_dispatch): run after env changes or on demand
+#   - Push to infra/r-bioc-env branch: confirm env change does not break the test
+#
+# The default ci.yml (which runs on every push) does NOT install the R-bioc env
+# and skips tests marked requires_r_bioc. CI green on ci.yml is sufficient for
+# PR merge approval. r-bioc.yml green is required after any envs/r-bioc.yml change.
+
+on:
+  schedule:
+    - cron: "0 2 * * 0"   # Every Sunday at 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Reason for manual trigger"
+        required: false
+        default: "manual check"
+  push:
+    branches:
+      - "infra/r-bioc-env"
+      - "infra/**"
+    paths:
+      - "envs/r-bioc.yml"
+      - "workflow/envs/r-bioconductor.yaml"
+      - "workflow/scripts/run_epidish.R"
+      - "workflow/scripts/run_celldmc.R"
+      - "tests/test_r_bioc_smoke.py"
+
+jobs:
+  r-bioc-smoke:
+    name: R-Bioc smoke (EpiDISH + CellDMC)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60   # Bioconductor installs can take 20-30 min
+
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: false
+          conda-solver: libmamba
+          activate-environment: dnamrnaseq2026-r-bioc
+          environment-file: envs/r-bioc.yml
+          auto-activate-base: false
+          use-only-tar-bz2: false
+
+      - name: Verify R + EpiDISH load
+        run: |
+          conda run -n dnamrnaseq2026-r-bioc Rscript -e "
+            library(EpiDISH)
+            library(decoupleR)
+            library(mCSEA)
+            library(methylclock)
+            cat('All R packages loaded OK\n')
+          "
+
+      - name: Verify CellDMC exported from EpiDISH
+        run: |
+          conda run -n dnamrnaseq2026-r-bioc Rscript -e "
+            library(EpiDISH)
+            stopifnot(exists('CellDMC', envir=asNamespace('EpiDISH')))
+            cat('CellDMC confirmed in EpiDISH namespace\n')
+          "
+
+      - name: Install Python test dependencies
+        run: |
+          conda run -n dnamrnaseq2026-r-bioc pip install \
+            "pytest>=8.0" "pandas>=2.0" "numpy>=1.26" \
+            "pyarrow>=14.0" "pyyaml>=6.0"
+          conda run -n dnamrnaseq2026-r-bioc pip install -e .
+
+      - name: Run requires_r_bioc tests
+        run: |
+          conda run -n dnamrnaseq2026-r-bioc pytest \
+            tests/test_r_bioc_smoke.py \
+            -m requires_r_bioc \
+            -v \
+            --tb=short
+        timeout-minutes: 20
+
+      - name: Upload test log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r-bioc-test-logs
+          path: |
+            .pytest_cache/
