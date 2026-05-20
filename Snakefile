@@ -53,6 +53,16 @@ rule all:
         "analysis/latest/data_best.parquet",
         "analysis/latest/cell_props_emory.csv",
         "analysis/latest/cell_props_best.csv",
+        "analysis/latest/pdata_emory_with_epidish.csv",
+        "analysis/latest/celldmc_delta_emory.tsv",
+        # Phase 1 downstream steps
+        "analysis/2026-05-17-phase-1/1.3/results.md",
+        "analysis/2026-05-17-phase-1/1.4/results.md",
+        "analysis/2026-05-17-phase-1/1.5/results.md",
+        "analysis/2026-05-17-phase-1/1.6/results.md",
+        "analysis/2026-05-17-phase-1/1.7/results.md",
+        # Gate 0-T re-run (fires off celldmc_delta_emory)
+        "analysis/2026-05-17-phase-0/gate_t_rerun_celldmc/gate_0T_rerun_results.json",
         # Embedding outputs (TODO: implemented in Phase 2.A)
         # Trajectory outputs (TODO: implemented in Phase 2.B)
         # Manuscript figures (TODO: implemented when analysis is complete)
