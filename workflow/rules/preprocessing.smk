@@ -111,10 +111,10 @@ rule load_emory:
         "../envs/r-bioconductor.yaml"
     shell:
         "Rscript workflow/scripts/load_cohort.R"
-        " --bvals    {input.bvals}"
-        " --pdata    {input.pdata}"
-        " --out_data {output.data}"
-        " --out_pdata {output.pdata}"
+        " --bvals    \"{input.bvals}\""
+        " --pdata    \"{input.pdata}\""
+        " --out_data \"{output.data}\""
+        " --out_pdata \"{output.pdata}\""
         " > {log} 2>&1"
 
 
@@ -141,9 +141,9 @@ rule load_best:
         "../envs/r-bioconductor.yaml"
     shell:
         "Rscript workflow/scripts/load_cohort.R"
-        " --bvals    {input.bvals}"
-        " --pdata    {input.pdata}"
-        " --out_data {output.data}"
+        " --bvals    \"{input.bvals}\""
+        " --pdata    \"{input.pdata}\""
+        " --out_data \"{output.data}\""
         " > {log} 2>&1"
 
 
@@ -348,8 +348,8 @@ rule epidish_emory:
         "../envs/r-bioconductor.yaml"
     shell:
         "Rscript workflow/scripts/run_epidish.R"
-        " --input {input.bvals}"
-        " --output {output.props}"
+        " --input \"{input.bvals}\""
+        " --output \"{output.props}\""
         " --ref centEpicV2"
         " --method RPC"
         " > {log} 2>&1"
@@ -375,8 +375,8 @@ rule epidish_best:
         "../envs/r-bioconductor.yaml"
     shell:
         "Rscript workflow/scripts/run_epidish.R"
-        " --input {input.bvals}"
-        " --output {output.props}"
+        " --input \"{input.bvals}\""
+        " --output \"{output.props}\""
         " --ref centEpicV2"
         " --method RPC"
         " > {log} 2>&1"
@@ -410,13 +410,13 @@ rule celldmc_pre_emory:
     threads: 4
     shell:
         "Rscript workflow/scripts/run_celldmc.R"
-        " --bvals  {input.bvals}"
-        " --fracs  {input.props}"
-        " --pdata  {input.pdata}"
+        " --bvals  \"{input.bvals}\""
+        " --fracs  \"{input.props}\""
+        " --pdata  \"{input.pdata}\""
         " --pheno  Response"
         " --visit  PRE-IOP"
         " --covars Age,sex"
-        " --output {output.results}"
+        " --output \"{output.results}\""
         " --fdr    0.05"
         " --ncore  {threads}"
         " > {log} 2>&1"
@@ -437,13 +437,13 @@ rule celldmc_post_emory:
     threads: 4
     shell:
         "Rscript workflow/scripts/run_celldmc.R"
-        " --bvals  {input.bvals}"
-        " --fracs  {input.props}"
-        " --pdata  {input.pdata}"
+        " --bvals  \"{input.bvals}\""
+        " --fracs  \"{input.props}\""
+        " --pdata  \"{input.pdata}\""
         " --pheno  Response"
         " --visit  POST-IOP"
         " --covars Age,sex"
-        " --output {output.results}"
+        " --output \"{output.results}\""
         " --fdr    0.05"
         " --ncore  {threads}"
         " > {log} 2>&1"
@@ -469,13 +469,13 @@ rule celldmc_delta_emory:
     threads: 4
     shell:
         "Rscript workflow/scripts/run_celldmc.R"
-        " --bvals  {input.bvals}"
-        " --fracs  {input.props}"
-        " --pdata  {input.pdata}"
+        " --bvals  \"{input.bvals}\""
+        " --fracs  \"{input.props}\""
+        " --pdata  \"{input.pdata}\""
         " --pheno  Response"
         " --visit  ALL"
         " --covars Age,sex"
-        " --output {output.results}"
+        " --output \"{output.results}\""
         " --fdr    0.05"
         " --ncore  {threads}"
         " > {log} 2>&1"
