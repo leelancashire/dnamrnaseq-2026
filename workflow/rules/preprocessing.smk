@@ -8,9 +8,9 @@ Rules implemented:
   - step_0_C_epidish_validation: Gate 0-C cell-type deconvolution validation
   - step_0_S_source_domain: Gate 0-S source-domain classifier (Emory vs BEST)
   Phase 1 data loading:
-  - load_emory: RData -> parquet (functional)
+  - load_emory: RData -> parquet + pdata CSV (functional)
   - load_best: RData -> parquet (functional)
-  Phase 1 steps (implemented):
+  Phase 1 steps (implemented, Python-wrapper path via python-scientific env):
   - step_1_1_epidish_emory: Step 1.1 EpiDISH for Emory (full deconvolution)
   - step_1_1_epidish_best: Step 1.1 EpiDISH for BEST (full deconvolution)
   - step_1_2_celldmc_pre_emory: Step 1.2a CellDMC PRE contrast
@@ -21,8 +21,9 @@ Rules implemented:
   - step_1_5_tf_activity: Step 1.5 CollecTRI TF activity
   - step_1_6_regulatory_enrichment: Step 1.6 ENCODE TFBS / EpiMap enrichment
   - step_1_7_replication: Step 1.7 BEST replication
-  Backward-compat aliases:
-  - epidish_emory, epidish_best, celldmc_pre_emory, celldmc_post_emory, celldmc_delta_emory
+  R-direct rules (Snakemake --use-conda r-bioconductor.yaml, write to analysis/latest/):
+  - epidish_emory, epidish_best: EpiDISH via Rscript (centEpicV2, RPC method)
+  - celldmc_pre_emory, celldmc_post_emory, celldmc_delta_emory: CellDMC via Rscript
 """
 
 import os
@@ -83,12 +84,19 @@ rule step_0_S_source_domain:
 # ---------------------------------------------------------------------------
 
 rule load_emory:
-    """Load Emory bVals + pData2, validate sample alignment, write parquet."""
+    """Load Emory bVals + pData2, validate sample alignment, write parquet + pdata CSV.
+
+    Outputs both the beta-value parquet (CpG x sample) and the pData CSV so that
+    downstream CellDMC rules (celldmc_pre_emory, celldmc_post_emory,
+    celldmc_delta_emory) have a single producing rule for pdata_emory.csv.
+    CSV includes all pData2 columns; at minimum: Visit, Response, Age, Sex.
+    """
     input:
         bvals   = str(Path(config["data"]["emory_dnam_dir"]) / "emory.bVals.architecture.RData"),
         pdata   = str(Path(config["data"]["emory_dnam_dir"]) / "emory_pData2.RData"),
     output:
         data    = "analysis/latest/data_emory.parquet",
+        pdata   = "analysis/latest/pdata_emory.csv",
     log:
         "analysis/latest/logs/load_emory.log",
     conda:
