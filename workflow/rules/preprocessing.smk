@@ -90,6 +90,14 @@ rule load_emory:
     downstream CellDMC rules (celldmc_pre_emory, celldmc_post_emory,
     celldmc_delta_emory) have a single producing rule for pdata_emory.csv.
     CSV includes all pData2 columns; at minimum: Visit, Response, Age, Sex.
+
+    Uses workflow/scripts/load_cohort.R (R-native RData reader) under the
+    r-bioconductor conda env. Replaces the pyreadr-based load_cohort.py path
+    which cannot handle R matrix objects (PyreadrError on bVals architecture
+    matrix, 292674 CpGs x 388 samples). Fix applied 2026-05-21.
+
+    Parquet orientation: CpG rows x sample columns (first col = "cpg").
+    run_epidish.R and run_celldmc.R both expect this orientation.
     """
     input:
         bvals   = str(Path(config["data"]["emory_dnam_dir"]) / "emory.bVals.architecture.RData"),
@@ -100,9 +108,14 @@ rule load_emory:
     log:
         "analysis/latest/logs/load_emory.log",
     conda:
-        "../envs/python-scientific.yaml"
-    script:
-        "../../scripts/snakemake/load_cohort.py"
+        "../envs/r-bioconductor.yaml"
+    shell:
+        "Rscript workflow/scripts/load_cohort.R"
+        " --bvals    {input.bvals}"
+        " --pdata    {input.pdata}"
+        " --out_data {output.data}"
+        " --out_pdata {output.pdata}"
+        " > {log} 2>&1"
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +123,13 @@ rule load_emory:
 # ---------------------------------------------------------------------------
 
 rule load_best:
-    """Load BEST bVals + pData2, validate sample alignment, write parquet."""
+    """Load BEST bVals + pData2, validate sample alignment, write parquet.
+
+    Uses workflow/scripts/load_cohort.R (R-native RData reader) under the
+    r-bioconductor conda env. See load_emory for rationale.
+    BEST does not currently need a separate pData CSV for CellDMC
+    (no celldmc_best rules in Phase 1); out_pdata is omitted.
+    """
     input:
         bvals   = str(Path(config["data"]["emory_dnam_dir"]) / "best.bVals.architecture.RData"),
         pdata   = str(Path(config["data"]["emory_dnam_dir"]) / "best_pData2.RData"),
@@ -119,9 +138,13 @@ rule load_best:
     log:
         "analysis/latest/logs/load_best.log",
     conda:
-        "../envs/python-scientific.yaml"
-    script:
-        "../../scripts/snakemake/load_cohort.py"
+        "../envs/r-bioconductor.yaml"
+    shell:
+        "Rscript workflow/scripts/load_cohort.R"
+        " --bvals    {input.bvals}"
+        " --pdata    {input.pdata}"
+        " --out_data {output.data}"
+        " > {log} 2>&1"
 
 
 # ---------------------------------------------------------------------------
@@ -391,8 +414,8 @@ rule celldmc_pre_emory:
         " --fracs  {input.props}"
         " --pdata  {input.pdata}"
         " --pheno  Response"
-        " --visit  PRE_IOP"
-        " --covars Age,Sex"
+        " --visit  PRE-IOP"
+        " --covars Age,sex"
         " --output {output.results}"
         " --fdr    0.05"
         " --ncore  {threads}"
@@ -418,8 +441,8 @@ rule celldmc_post_emory:
         " --fracs  {input.props}"
         " --pdata  {input.pdata}"
         " --pheno  Response"
-        " --visit  POST_IOP"
-        " --covars Age,Sex"
+        " --visit  POST-IOP"
+        " --covars Age,sex"
         " --output {output.results}"
         " --fdr    0.05"
         " --ncore  {threads}"
@@ -451,7 +474,7 @@ rule celldmc_delta_emory:
         " --pdata  {input.pdata}"
         " --pheno  Response"
         " --visit  ALL"
-        " --covars Age,Sex"
+        " --covars Age,sex"
         " --output {output.results}"
         " --fdr    0.05"
         " --ncore  {threads}"
