@@ -298,11 +298,11 @@ def main() -> None:
             zorder=6,
             edgecolors="black",
             linewidth=1.0,
-            label=f"{cname.replace('_centroid','')}",
+            label=f"{cname.replace('_centroid', '')}",
         )
 
-    ax.set_xlabel(f"PC1 ({ev[0]*100:.1f}%)")
-    ax.set_ylabel(f"PC2 ({ev[1]*100:.1f}%)" if len(ev) > 1 else "PC2")
+    ax.set_xlabel(f"PC1 ({ev[0] * 100:.1f}%)")
+    ax.set_ylabel(f"PC2 ({ev[1] * 100:.1f}%)" if len(ev) > 1 else "PC2")
     ax.set_title(
         f"Gate 0-X: Emory vs GSE98793 centroid projection\n"
         f"d(NR,TRD)={perm['observed_d_nr']:.4f}, d(R,TRD)={perm['observed_d_r']:.4f}, "

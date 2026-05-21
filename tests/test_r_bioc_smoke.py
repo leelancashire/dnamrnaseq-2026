@@ -269,15 +269,15 @@ class TestRunEpiDISHScript:
 
         # Row sums approx 1
         row_sums = df.sum(axis=1)
-        assert (
-            abs(row_sums - 1.0) < 0.05
-        ).all(), f"Row sums deviate from 1.0: {row_sums.describe()}"
+        assert (abs(row_sums - 1.0) < 0.05).all(), (
+            f"Row sums deviate from 1.0: {row_sums.describe()}"
+        )
 
         # No constant columns (the Phase 1 failure mode)
         col_vars = df.var(axis=0)
-        assert (
-            col_vars > 1e-8
-        ).all(), f"Constant cell-type columns detected: {col_vars[col_vars <= 1e-8].index.tolist()}"
+        assert (col_vars > 1e-8).all(), (
+            f"Constant cell-type columns detected: {col_vars[col_vars <= 1e-8].index.tolist()}"
+        )
 
     def test_epidish_rejects_non_beta_values(self, tmp_path: Path) -> None:
         """run_epidish.R exits non-zero when input contains M-values (range outside [0,1])."""
@@ -308,9 +308,9 @@ class TestRunEpiDISHScript:
             text=True,
         )
 
-        assert (
-            result.returncode != 0
-        ), "run_epidish.R should have rejected M-values (out-of-range betas)"
+        assert result.returncode != 0, (
+            "run_epidish.R should have rejected M-values (out-of-range betas)"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -379,9 +379,9 @@ class TestRunCellDMCScript:
         assert len(df) > 0, "CellDMC output is empty"
 
         # One row per (CpG, cell-type) pair
-        assert (
-            df["cell_type"].nunique() >= 5
-        ), f"Expected >=5 cell types, got {df['cell_type'].nunique()}"
+        assert df["cell_type"].nunique() >= 5, (
+            f"Expected >=5 cell types, got {df['cell_type'].nunique()}"
+        )
 
         # p-values in [0, 1]
         assert (df["p_val"].dropna() >= 0).all(), "Negative p-values in CellDMC output"
@@ -432,6 +432,6 @@ class TestRunCellDMCScript:
             text=True,
         )
 
-        assert (
-            result.returncode != 0
-        ), "run_celldmc.R should have rejected a constant phenotype vector"
+        assert result.returncode != 0, (
+            "run_celldmc.R should have rejected a constant phenotype vector"
+        )

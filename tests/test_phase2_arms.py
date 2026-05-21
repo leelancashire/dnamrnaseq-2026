@@ -11,6 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import torch
+
 from dnamrnaseq2026.embedding.arm_a_fm import (
     ArmAConfig,
     ArmAEncoder,
@@ -31,7 +32,6 @@ from dnamrnaseq2026.embedding.arm_c_contrastive import (
     info_nce_loss,
     train_arm_c,
 )
-
 from tests.phase2_fixtures import make_synthetic_paired
 
 CUDA_AVAILABLE = torch.cuda.is_available()

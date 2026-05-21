@@ -8,6 +8,7 @@ metric (v) "pending Phase 1 re-run" behaviour.
 from __future__ import annotations
 
 import numpy as np
+
 from dnamrnaseq2026.conformal.directional import (
     arc_length_score,
     importance_weights,
@@ -31,7 +32,6 @@ from dnamrnaseq2026.trajectory.geometry import (
     recovery_axis,
     trajectory_consistency,
 )
-
 from tests.phase2_fixtures import make_synthetic_paired
 
 # ---------------------------------------------------------------------------

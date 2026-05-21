@@ -222,8 +222,7 @@ def _write_results_md(
             (modality_interaction["q_modality_interaction"].fillna(1.0) < 0.05).sum()
         )
         lines.append(
-            f"CpGs with significant modality-by-response interaction "
-            f"(FDR < 0.05): {n_interaction}"
+            f"CpGs with significant modality-by-response interaction (FDR < 0.05): {n_interaction}"
         )
         lines.append("These CpGs show therapy-specific effects and are flagged for follow-up.")
     else:

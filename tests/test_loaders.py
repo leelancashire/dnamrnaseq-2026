@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 import pandas as pd
 import pytest
+
 from dnamrnaseq2026.data.loaders import check_sample_alignment
 
 # ---------------------------------------------------------------------------

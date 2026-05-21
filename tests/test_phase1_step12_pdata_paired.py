@@ -156,12 +156,12 @@ class TestPdataPairedIdBasedJoin:
             pdata_aug, cell_props
         )
 
-        assert (
-            list(pdata_paired.index) == common
-        ), "pdata_paired.index must equal common_subjects in the same order"
-        assert (
-            list(delta_cell_props_df.index) == common
-        ), "delta_cell_props_df.index must equal common_subjects in the same order"
+        assert list(pdata_paired.index) == common, (
+            "pdata_paired.index must equal common_subjects in the same order"
+        )
+        assert list(delta_cell_props_df.index) == common, (
+            "delta_cell_props_df.index must equal common_subjects in the same order"
+        )
 
     def test_out_of_order_subjects_still_correctly_aligned(self) -> None:
         """Core regression: when filter functions return subjects in a different
@@ -183,9 +183,9 @@ class TestPdataPairedIdBasedJoin:
         )
 
         # The index must be exactly common_subjects in order.
-        assert (
-            list(pdata_paired.index) == common
-        ), "Out-of-order subjects: pdata_paired.index must match common_subjects exactly"
+        assert list(pdata_paired.index) == common, (
+            "Out-of-order subjects: pdata_paired.index must match common_subjects exactly"
+        )
         # For each subject, the Response in pdata_paired must be the correct
         # response for THAT subject (not the one positionally adjacent in pdata_aug).
         for sc in common:
@@ -219,17 +219,17 @@ class TestPdataPairedIdBasedJoin:
             "SC001",
             "SC003",
         }, "Only subjects with cell_props for both PRE and POST should be included"
-        assert list(pdata_paired.index) == sorted(
-            common
-        ), "pdata_paired must be indexed by the surviving common_subjects in sorted order"
+        assert list(pdata_paired.index) == sorted(common), (
+            "pdata_paired must be indexed by the surviving common_subjects in sorted order"
+        )
         assert len(delta_cell_props_df) == 2
 
         # Each subject's pdata_paired row must have the CORRECT Response.
         for sc in common:
             expected = pdata_aug[pdata_aug["Subcode"] == sc]["Response"].iloc[0]
-            assert (
-                pdata_paired.loc[sc, "Response"] == expected
-            ), f"{sc}: wrong Response in pdata_paired after subject-drop filtering"
+            assert pdata_paired.loc[sc, "Response"] == expected, (
+                f"{sc}: wrong Response in pdata_paired after subject-drop filtering"
+            )
 
     def test_delta_cell_props_index_aligns_with_pdata_paired(self) -> None:
         """delta_cell_props_df.index and pdata_paired.index must be identical.
@@ -245,9 +245,9 @@ class TestPdataPairedIdBasedJoin:
             pdata_aug, cell_props
         )
 
-        assert list(delta_cell_props_df.index) == list(
-            pdata_paired.index
-        ), "delta_cell_props_df.index and pdata_paired.index must be identical"
+        assert list(delta_cell_props_df.index) == list(pdata_paired.index), (
+            "delta_cell_props_df.index and pdata_paired.index must be identical"
+        )
 
     def test_delta_cell_props_values_correct_for_each_subject(self) -> None:
         """Each row of delta_cell_props_df must be POST - PRE for THAT subject.

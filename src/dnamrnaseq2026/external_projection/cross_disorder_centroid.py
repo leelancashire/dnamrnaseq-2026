@@ -93,7 +93,7 @@ def harmonise_expression_matrices(
     )
     if n_shared < 5000:
         logger.warning(
-            "Fewer than 5000 shared genes (%d). " "Check gene ID format (symbol vs Ensembl).",
+            "Fewer than 5000 shared genes (%d). Check gene ID format (symbol vs Ensembl).",
             n_shared,
         )
 

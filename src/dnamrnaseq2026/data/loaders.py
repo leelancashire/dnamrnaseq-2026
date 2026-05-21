@@ -88,9 +88,7 @@ def _load_rdata_rdata(path: Path, object_name: str) -> pd.DataFrame:
 
     if object_name not in converted:
         available = list(converted.keys())
-        raise KeyError(
-            f"Object '{object_name}' not found in {path.name}. " f"Available: {available}"
-        )
+        raise KeyError(f"Object '{object_name}' not found in {path.name}. Available: {available}")
 
     obj = converted[object_name]
     if isinstance(obj, pd.DataFrame):
