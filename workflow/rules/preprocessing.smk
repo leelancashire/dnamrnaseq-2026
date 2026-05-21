@@ -229,13 +229,77 @@ rule step_1_2_celldmc_delta_emory:
         "python scripts/12_phase1_celldmc.py > {log} 2>&1"
 
 
+# ---------------------------------------------------------------------------
+# Rule: merge_pdata_epidish_emory
+# Joins pdata_emory.csv (from load_emory) with cell_props_emory.csv (from
+# epidish_emory) to produce the augmented pdata used by steps 1.3-1.5 and
+# the gate-0-T re-run script.  Pure Python, no R env needed.
+# Replaces the pdata_emory_with_epidish.csv that the old Python step_1_1_*
+# rules wrote (those rules fall back to null pData2 and are superseded).
+# ---------------------------------------------------------------------------
+
+rule merge_pdata_epidish_emory:
+    """Merge pdata_emory.csv + EpiDISH cell fractions into augmented pdata.
+
+    Produces analysis/latest/pdata_emory_with_epidish.csv: all pData2 columns
+    plus the 7 EpiDISH cell-type fraction columns (Bcell, CD4T, CD8T, Gran,
+    Mono, NK, nRBC).  The join key is the shared sample index (SampleName /
+    AMC-ID).  Samples present in pdata but absent from cell_props get NaN
+    cell-fraction columns; a warning is logged.
+    """
+    input:
+        pdata   = "analysis/latest/pdata_emory.csv",
+        props   = "analysis/latest/cell_props_emory.csv",
+    output:
+        pdata_aug = "analysis/latest/pdata_emory_with_epidish.csv",
+    log:
+        "analysis/latest/logs/merge_pdata_epidish_emory.log",
+    conda:
+        "../envs/python-scientific.yaml"
+    run:
+        import logging
+        import pandas as pd
+
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)s %(message)s",
+            handlers=[logging.FileHandler(log[0]), logging.StreamHandler()],
+        )
+        logger = logging.getLogger("merge_pdata_epidish_emory")
+
+        pdata = pd.read_csv(input.pdata, index_col=0)
+        props = pd.read_csv(input.props, index_col=0)
+
+        logger.info("pdata: %d rows x %d cols", len(pdata), len(pdata.columns))
+        logger.info("cell_props: %d rows x %d cols", len(props), len(props.columns))
+
+        overlap = pdata.index.intersection(props.index)
+        missing = pdata.index.difference(props.index)
+        if len(missing) > 0:
+            logger.warning(
+                "%d pdata samples absent from cell_props (will be NaN): %s",
+                len(missing),
+                list(missing)[:10],
+            )
+        logger.info("%d samples aligned between pdata and cell_props.", len(overlap))
+
+        pdata_aug = pdata.join(props, how="left")
+        pdata_aug.to_csv(output.pdata_aug, index=True)
+        logger.info(
+            "Written: %s (%d rows x %d cols)",
+            output.pdata_aug,
+            len(pdata_aug),
+            len(pdata_aug.columns),
+        )
+
+
 # Step 1.3: Cell-type-corrected RNA-seq DE + rescue check 1.3.5
 
 rule step_1_3_rnaseq_de_emory:
     """Step 1.3: Cell-type-corrected RNA-seq DE at PRE, POST, delta + rescue 1.3.5."""
     input:
-        props   = "analysis/2026-05-17-phase-1/1.1/cell_props_emory.csv",
-        pdata   = "analysis/2026-05-17-phase-1/1.1/pdata_emory_with_epidish.csv",
+        props   = "analysis/latest/cell_props_emory.csv",
+        pdata   = "analysis/latest/pdata_emory_with_epidish.csv",
     output:
         de_pre      = "analysis/2026-05-17-phase-1/1.3/de_pre_emory.tsv",
         de_post     = "analysis/2026-05-17-phase-1/1.3/de_post_emory.tsv",
@@ -255,7 +319,7 @@ rule step_1_3_rnaseq_de_emory:
 rule step_1_4_pathway_activity:
     """Step 1.4: decoupleR pathway activity (PROGENy + Reactome/GSVA)."""
     input:
-        pdata   = "analysis/2026-05-17-phase-1/1.1/pdata_emory_with_epidish.csv",
+        pdata   = "analysis/latest/pdata_emory_with_epidish.csv",
     output:
         results_md  = "analysis/2026-05-17-phase-1/1.4/results.md",
         test_tsv    = "analysis/2026-05-17-phase-1/1.4/pathway_response_test.tsv",
@@ -272,7 +336,7 @@ rule step_1_4_pathway_activity:
 rule step_1_5_tf_activity:
     """Step 1.5: decoupleR TF activity (CollecTRI)."""
     input:
-        pdata   = "analysis/2026-05-17-phase-1/1.1/pdata_emory_with_epidish.csv",
+        pdata   = "analysis/latest/pdata_emory_with_epidish.csv",
     output:
         results_md  = "analysis/2026-05-17-phase-1/1.5/results.md",
         test_tsv    = "analysis/2026-05-17-phase-1/1.5/tf_response_test.tsv",
@@ -290,7 +354,7 @@ rule step_1_5_tf_activity:
 rule step_1_6_regulatory_enrichment:
     """Step 1.6: ENCODE TFBS / EpiMap enrichment on CellDMC delta CpGs."""
     input:
-        celldmc = "analysis/2026-05-17-phase-1/1.2/celldmc_delta_emory.tsv",
+        celldmc = "analysis/latest/celldmc_delta_emory.tsv",
     output:
         enrichment  = "analysis/2026-05-17-phase-1/1.6/regulatory_enrichment.tsv",
         results_md  = "analysis/2026-05-17-phase-1/1.6/results.md",
@@ -307,8 +371,8 @@ rule step_1_6_regulatory_enrichment:
 rule step_1_7_replication:
     """Step 1.7: BEST replication of Emory CellDMC delta-significant CpGs."""
     input:
-        celldmc     = "analysis/2026-05-17-phase-1/1.2/celldmc_delta_emory.tsv",
-        props_best  = "analysis/2026-05-17-phase-1/1.1/cell_props_best.csv",
+        celldmc     = "analysis/latest/celldmc_delta_emory.tsv",
+        props_best  = "analysis/latest/cell_props_best.csv",
     output:
         overall         = "analysis/2026-05-17-phase-1/1.7/replication_overall.tsv",
         summary_json    = "analysis/2026-05-17-phase-1/1.7/replication_summary.json",
@@ -479,3 +543,45 @@ rule celldmc_delta_emory:
         " --fdr    0.05"
         " --ncore  {threads}"
         " > {log} 2>&1"
+
+
+# ---------------------------------------------------------------------------
+# Rule: gate_0T_rerun_celldmc
+# Re-runs Gate 0-T using cell-type-corrected paired-delta matrices.  Wires
+# the full dependency chain: load_emory -> epidish_emory ->
+# merge_pdata_epidish_emory -> celldmc_delta_emory -> gate_0T_rerun_celldmc.
+# Fires automatically once step 1.2 (celldmc_delta_emory) completes.
+# ---------------------------------------------------------------------------
+
+rule gate_0T_rerun_celldmc:
+    """Gate 0-T re-run: PERMANOVA + Cohen's d on CellDMC-corrected paired-Δ PCA.
+
+    Re-runs Gate 0-T (raw verdict: MARGINAL, PERMANOVA p=0.111, max d=0.267)
+    using cell-type-corrected paired-delta matrices after real EpiDISH cell
+    fractions and CellDMC interaction-term outputs are available.
+
+    Inputs consumed:
+      - analysis/latest/cell_props_emory.csv  (from epidish_emory)
+      - analysis/latest/pdata_emory_with_epidish.csv  (from merge_pdata_epidish_emory)
+      - analysis/latest/celldmc_delta_emory.tsv  (from celldmc_delta_emory)
+
+    The gate script also loads Emory bVals + RNA-seq via loaders -- those
+    are not declared here because they are raw data files (not Snakemake
+    outputs), but declaring the three artefact inputs is sufficient for
+    correct DAG ordering.
+    """
+    input:
+        cell_props  = "analysis/latest/cell_props_emory.csv",
+        pdata_aug   = "analysis/latest/pdata_emory_with_epidish.csv",
+        celldmc     = "analysis/latest/celldmc_delta_emory.tsv",
+    output:
+        results_json    = "analysis/2026-05-17-phase-0/gate_t_rerun_celldmc/gate_0T_rerun_results.json",
+        loadings_csv    = "analysis/2026-05-17-phase-0/gate_t_rerun_celldmc/gate_0T_rerun_loadings.csv",
+        fig_png         = "analysis/2026-05-17-phase-0/gate_t_rerun_celldmc/gate_0T_rerun_pca_arrows.png",
+        results_md      = "analysis/2026-05-17-phase-0/gate_t_rerun_celldmc/results.md",
+    log:
+        "analysis/2026-05-17-phase-0/gate_t_rerun_celldmc/gate_0T_rerun.log",
+    conda:
+        "../envs/python-scientific.yaml"
+    shell:
+        "python scripts/01_phase0_gate_t_rerun_celldmc.py > {log} 2>&1"
