@@ -182,13 +182,26 @@ class TestRBiocEnvSetup:
         assert "methylclock OK" in result.stdout
 
     def test_epidish_reference_panels_ship_with_package(self) -> None:
-        """Reference panels centEpicV2, centEpicV1, centBloodSub are available via data()."""
+        """centDHSbloodDMC.m (project default) and cent12CT.m are available via data().
+
+        NOTE: centEpicV2 and centEpicV1 do NOT exist in EpiDISH 2.16.0. This test
+        was updated from the original centEpicV2 check (which would always fail)
+        to validate the actual reference panels present in this version.
+        """
         r_script = textwrap.dedent("""
             library(EpiDISH)
-            data(centEpicV2, package='EpiDISH', envir=environment())
-            stopifnot(exists('centEpicV2'))
-            cat(sprintf('centEpicV2 %d CpGs x %d cell types\\n',
-                        nrow(centEpicV2), ncol(centEpicV2)))
+            # centDHSbloodDMC.m: project default (333 CpGs, 7 types)
+            data(centDHSbloodDMC.m, package='EpiDISH', envir=environment())
+            stopifnot(exists('centDHSbloodDMC.m'))
+            mat <- get('centDHSbloodDMC.m')
+            cat(sprintf('centDHSbloodDMC.m %d CpGs x %d cell types\\n',
+                        nrow(mat), ncol(mat)))
+            # cent12CT.m: alternative high-resolution reference
+            data(cent12CT.m, package='EpiDISH', envir=environment())
+            stopifnot(exists('cent12CT.m'))
+            mat12 <- get('cent12CT.m')
+            cat(sprintf('cent12CT.m %d CpGs x %d cell types\\n',
+                        nrow(mat12), ncol(mat12)))
             cat('PANELS OK\\n')
         """)
         result = subprocess.run(
@@ -228,7 +241,7 @@ class TestRunEpiDISHScript:
                 "--output",
                 str(out_path),
                 "--ref",
-                "centEpicV2",
+                "centDHSbloodDMC.m",
                 "--method",
                 "RPC",
             ],

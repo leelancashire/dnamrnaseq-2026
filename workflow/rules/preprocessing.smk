@@ -22,7 +22,7 @@ Rules implemented:
   - step_1_6_regulatory_enrichment: Step 1.6 ENCODE TFBS / EpiMap enrichment
   - step_1_7_replication: Step 1.7 BEST replication
   R-direct rules (Snakemake --use-conda r-bioconductor.yaml, write to analysis/latest/):
-  - epidish_emory, epidish_best: EpiDISH via Rscript (centEpicV2, RPC method)
+  - epidish_emory, epidish_best: EpiDISH via Rscript (centDHSbloodDMC.m, RPC method)
   - celldmc_pre_emory, celldmc_post_emory, celldmc_delta_emory: CellDMC via Rscript
 """
 
@@ -330,10 +330,10 @@ rule step_1_7_replication:
 rule epidish_emory:
     """EpiDISH cell-fraction estimation for Emory cohort.
 
-    Calls workflow/scripts/run_epidish.R with the centEpicV2 reference panel
-    (IDOL-optimised, ships with the EpiDISH package -- no external download).
-    Output: sample x cell-type CSV (7 cell types: Bcell, CD4T, CD8T, Gran,
-    Mono, NK, nRBC). Row sums ~1. Variance check included in the R script.
+    Calls workflow/scripts/run_epidish.R with the centDHSbloodDMC.m reference
+    panel (333 CpGs, 7 types: B, NK, CD4T, CD8T, Mono, Neutro, Eosino).
+    centEpicV2 does NOT exist in EpiDISH 2.16.0 -- that was Bug 5.
+    Output: sample x cell-type CSV. Row sums ~1. Variance check in the R script.
 
     Architecture: Option 2 (Snakemake --use-conda R env, R writes CSV,
     Python reads CSV). Chosen over rpy2 for stability.
@@ -350,7 +350,7 @@ rule epidish_emory:
         "Rscript workflow/scripts/run_epidish.R"
         " --input \"{input.bvals}\""
         " --output \"{output.props}\""
-        " --ref centEpicV2"
+        " --ref centDHSbloodDMC.m"
         " --method RPC"
         " > {log} 2>&1"
 
@@ -362,7 +362,7 @@ rule epidish_emory:
 rule epidish_best:
     """EpiDISH cell-fraction estimation for BEST cohort.
 
-    Same reference panel (centEpicV2) and method (RPC) as Emory for
+    Same reference panel (centDHSbloodDMC.m) and method (RPC) as Emory for
     cross-cohort comparability. See epidish_emory for architecture notes.
     """
     input:
@@ -377,7 +377,7 @@ rule epidish_best:
         "Rscript workflow/scripts/run_epidish.R"
         " --input \"{input.bvals}\""
         " --output \"{output.props}\""
-        " --ref centEpicV2"
+        " --ref centDHSbloodDMC.m"
         " --method RPC"
         " > {log} 2>&1"
 
