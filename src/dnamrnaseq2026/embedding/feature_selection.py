@@ -47,6 +47,15 @@ class FeatureTier:
     rationale: str
 
 
+# CellDMC interaction artefact filenames, tried in order. The design doc
+# Section 3v names a parquet; the real v5 Phase 1 run writes the per-contrast
+# TSVs (celldmc_delta_emory.tsv etc.). Both carry the same schema.
+_CELLDMC_FILENAMES = (
+    "celldmc_interaction_results.parquet",
+    "celldmc_delta_emory.tsv",
+)
+
+
 def read_celldmc_interactions(
     artefact_dir: Path = PHASE1_ARTEFACT_DIR,
 ) -> pd.DataFrame | None:
@@ -54,16 +63,20 @@ def read_celldmc_interactions(
 
     Expected schema (design Section 3v):
     ``cpg, cell_type, coef, se, t_stat, p_val, fdr, sig``.
-    A zero-byte stub (current Phase 1 state) is treated as absent.
+    Accepts both the design-doc parquet name and the real v5 TSV
+    (``celldmc_delta_emory.tsv``). A zero-byte stub is treated as absent.
     """
-    path = artefact_dir / "celldmc_interaction_results.parquet"
-    if not path.exists() or path.stat().st_size == 0:
-        logger.info("CellDMC interaction artefact missing/stub at %s", path)
-        return None
-    df = pd.read_parquet(path)
-    if df.empty:
-        return None
-    return df
+    for name in _CELLDMC_FILENAMES:
+        path = artefact_dir / name
+        if not path.exists() or path.stat().st_size == 0:
+            continue
+        df = pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path, sep="\t")
+        if df.empty:
+            continue
+        logger.info("CellDMC interaction artefact loaded from %s (%s)", path, df.shape)
+        return df
+    logger.info("CellDMC interaction artefact missing/stub in %s", artefact_dir)
+    return None
 
 
 def read_pathway_activity(
