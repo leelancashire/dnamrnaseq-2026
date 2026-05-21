@@ -45,8 +45,11 @@ dependencies:
   # Contrastive learning losses
   - pytorch-metric-learning>=2.3
 
-  # Conformal prediction
+  # Pathway/TF activity inference (decoupler 2.x; install via pip only -- not
+  # on conda-forge at the required version as of 2026-05)
   - pip:
+    - decoupler>=2.0   # PROGENy + CollecTRI network loading and ULM inference
+    - anndata>=0.10    # required by decoupler 2.x
     - mapie>=0.8
     - crepes>=0.6
     - geneformer       # pip install from HuggingFace; pin to a tag when stable

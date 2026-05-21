@@ -6,7 +6,7 @@
 
 | Source | N pathways | N sig (FDR < 0.10) | Acceptance |
 |--------|-----------|-------------------|------------|
-| PROGENy | 2 | 0 | MARGINAL |
+| PROGENy | 14 | 0 | MARGINAL |
 | GSVA (Reactome) | 0 | 0 | MARGINAL |
 
 **Overall acceptance:** MARGINAL

@@ -29,16 +29,48 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+def _strip_ensembl_prefix(gene_ids: list[str]) -> list[str]:
+    """Convert Ensembl+symbol IDs to gene symbols.
+
+    Handles the format 'ENSG00000227232.5_WASH7P' produced by the mmVAE
+    RNA-seq pipeline: strip the 'ENSG...' Ensembl prefix and return the
+    symbol component.  If no underscore separator is present the original
+    ID is returned unchanged.  Duplicate symbols after stripping are made
+    unique by appending '_1', '_2', etc.
+    """
+    symbols = []
+    for g in gene_ids:
+        parts = g.split("_", 1)
+        if len(parts) == 2 and parts[0].startswith("ENSG"):
+            symbols.append(parts[1])
+        else:
+            symbols.append(g)
+    # Deduplicate: keep track of seen symbols and append suffix if needed
+    seen: dict[str, int] = {}
+    result: list[str] = []
+    for sym in symbols:
+        if sym in seen:
+            seen[sym] += 1
+            result.append(f"{sym}_{seen[sym]}")
+        else:
+            seen[sym] = 0
+            result.append(sym)
+    return result
+
+
 def get_progeny_net(organism: str = "human", top: int = 100) -> pd.DataFrame:
     """Load PROGENy regulon network via decoupler-py.
 
     Falls back to a minimal synthetic network if decoupler is not installed
     (used in CI without the full scientific stack).
 
+    Compatible with both decoupler 1.x (``decoupler.get_progeny``) and
+    decoupler 2.x (``decoupler.op.progeny``).
+
     Parameters
     ----------
     organism:
-        Organism string passed to ``decoupler.get_progeny``.
+        Organism string passed to ``decoupler.op.progeny``.
     top:
         Number of top targets per pathway.
 
@@ -50,7 +82,14 @@ def get_progeny_net(organism: str = "human", top: int = 100) -> pd.DataFrame:
     try:
         import decoupler
 
-        net: pd.DataFrame = decoupler.get_progeny(organism=organism, top=top)
+        # decoupler 2.x API: decoupler.op.progeny
+        if hasattr(decoupler, "op") and hasattr(decoupler.op, "progeny"):
+            net: pd.DataFrame = decoupler.op.progeny(organism=organism, top=top)
+        elif hasattr(decoupler, "get_progeny"):
+            # decoupler 1.x legacy path
+            net = decoupler.get_progeny(organism=organism, top=top)
+        else:
+            raise AttributeError("Could not find PROGENy loader in decoupler API.")
         logger.info("Loaded PROGENy network: %d gene-pathway pairs.", len(net))
         return net
     except ImportError:
@@ -75,12 +114,17 @@ def run_progeny_ulm(
 ) -> pd.DataFrame:
     """Run PROGENy via decoupler ULM method.
 
+    Gene IDs are converted to gene symbols before matching against the
+    PROGENy network (handles Ensembl+symbol format from the mmVAE pipeline).
+
+    Compatible with both decoupler 1.x and 2.x APIs.
+
     Parameters
     ----------
     log_cpm:
         2-D array (n_genes, n_samples), log-CPM expression matrix.
     gene_ids:
-        Gene identifiers (rows).
+        Gene identifiers (rows).  May be in 'ENSG..._SYMBOL' format.
     sample_ids:
         Sample identifiers (columns).
     net:
@@ -94,9 +138,25 @@ def run_progeny_ulm(
     try:
         import decoupler
 
-        mat = pd.DataFrame(log_cpm.T, index=sample_ids, columns=gene_ids)
-        estimates, pvals = decoupler.run_ulm(mat=mat, net=net, verbose=False)
-        result_df: pd.DataFrame = pd.DataFrame(estimates)
+        symbols = _strip_ensembl_prefix(gene_ids)
+        mat = pd.DataFrame(log_cpm.T, index=sample_ids, columns=symbols)
+
+        # decoupler 2.x: decoupler.mt.ulm(data, net) returns (estimates, pvals)
+        if hasattr(decoupler, "mt") and hasattr(decoupler.mt, "ulm"):
+            out = decoupler.mt.ulm(data=mat, net=net)
+            # In 2.x the function returns a tuple (estimates_df, pvals_df)
+            estimates = out[0] if isinstance(out, tuple) else out
+            if isinstance(estimates, pd.DataFrame):
+                result_df = estimates
+            else:
+                result_df = pd.DataFrame(estimates)
+        elif hasattr(decoupler, "run_ulm"):
+            # decoupler 1.x legacy
+            estimates, _pvals = decoupler.run_ulm(mat=mat, net=net, verbose=False)
+            result_df = pd.DataFrame(estimates)
+        else:
+            raise AttributeError("Could not find ULM runner in decoupler API.")
+
         logger.info(
             "PROGENy ULM complete: %d samples x %d pathways.",
             result_df.shape[0],
@@ -151,8 +211,8 @@ def run_gsva(
     pd.DataFrame
         GSVA scores, shape (n_samples, n_gene_sets). Index = sample_ids.
     """
-    # Filter gene sets to those with at least min_targets in the gene panel
-    gene_panel_set = set(gene_ids)
+    symbols = _strip_ensembl_prefix(gene_ids)
+    gene_panel_set = set(symbols)
     filtered_sets = {
         k: [g for g in v if g in gene_panel_set]
         for k, v in gene_sets.items()
@@ -172,7 +232,7 @@ def run_gsva(
                 rows.append({"source": gs_name, "target": g, "weight": 1.0})
         net = pd.DataFrame(rows)
 
-        mat = pd.DataFrame(log_cpm.T, index=sample_ids, columns=gene_ids)
+        mat = pd.DataFrame(log_cpm.T, index=sample_ids, columns=symbols)
         estimates, _ = decoupler.run_gsva(mat=mat, net=net, verbose=False)
         gsva_df: pd.DataFrame = pd.DataFrame(estimates)
         logger.info("GSVA (decoupler) complete: %d samples x %d sets.", *gsva_df.shape)
@@ -184,7 +244,7 @@ def run_gsva(
     try:
         import gseapy
 
-        mat_df = pd.DataFrame(log_cpm, index=gene_ids, columns=sample_ids)
+        mat_df = pd.DataFrame(log_cpm, index=symbols, columns=sample_ids)
         result = gseapy.ssgsea(data=mat_df, gene_sets=filtered_sets, outdir=None, no_plot=True)
         scores: pd.DataFrame = pd.DataFrame(
             result.res2d.pivot(index="Name", columns="Term", values="ES")

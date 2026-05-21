@@ -342,7 +342,7 @@ def main() -> None:
     # PROGENy alias
     progeny_src = LATEST_DIR / "progeny_activity_emory.parquet"
     progeny_dst = out_dir / "progeny_pathway_activity.parquet"
-    if progeny_src.exists() and not progeny_dst.exists():
+    if progeny_src.exists():
         import shutil
 
         shutil.copy(progeny_src, progeny_dst)
@@ -351,7 +351,7 @@ def main() -> None:
     # TF activity alias
     tf_src = LATEST_DIR / "tf_activity_emory.parquet"
     tf_dst = out_dir / "decoupler_tf_activity.parquet"
-    if tf_src.exists() and not tf_dst.exists():
+    if tf_src.exists():
         import shutil
 
         shutil.copy(tf_src, tf_dst)

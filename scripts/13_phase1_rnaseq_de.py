@@ -49,26 +49,51 @@ def main() -> None:
     gene_ids = list(log_cpm_df.index)
     log_cpm = log_cpm_df.values.astype(np.float64)
 
-    _, pdata = load_emory()
+    # load_emory() returns (bvals, subject_data) where subject_data is indexed
+    # by AMC-style sample IDs that match RNA-seq columns directly.
+    _, subject_data = load_emory()
 
     cell_props_path = LATEST_DIR / "cell_props_emory.csv"
-    pdata_aug_path = LATEST_DIR / "pdata_emory_with_epidish.csv"
-    cell_props = pd.read_csv(cell_props_path, index_col=0) if cell_props_path.exists() else None
-    pdata_aug = pd.read_csv(pdata_aug_path, index_col=0) if pdata_aug_path.exists() else pdata
+    cell_props_raw = pd.read_csv(cell_props_path, index_col=0) if cell_props_path.exists() else None
 
-    if cell_props is None:
+    if cell_props_raw is None:
         logger.warning("cell_props_emory.csv not found; using pData2 fallback.")
         from dnamrnaseq2026.preprocessing.cell_type_correction import run_epidish_from_pdata
 
-        cell_props = run_epidish_from_pdata(pdata)
+        cell_props_raw = run_epidish_from_pdata(subject_data)
 
-    # Align RNA-seq samples to pdata
-    shared_samples = [s for s in pdata_aug.index if s in log_cpm_df.columns]
-    pdata_shared = pdata_aug.loc[shared_samples]
+    # cell_props_raw is indexed by Sentrix IDs (from EpiDISH on DNAm).
+    # Map Sentrix -> AMC via subject_data['SampleName_DNAm'] column.
+    if "SampleName_DNAm" in subject_data.columns:
+        dnam_to_amc = {
+            str(row["SampleName_DNAm"]): str(idx)
+            for idx, row in subject_data.iterrows()
+            if pd.notna(row["SampleName_DNAm"])
+        }
+        new_index = [dnam_to_amc.get(str(sid), str(sid)) for sid in cell_props_raw.index]
+        cell_props = cell_props_raw.copy()
+        cell_props.index = pd.Index(new_index)
+        cell_props = cell_props[~cell_props.index.duplicated(keep="first")]
+        logger.info(
+            "Remapped cell_props Sentrix -> AMC-IDs: %d rows.",
+            len(cell_props),
+        )
+    else:
+        cell_props = cell_props_raw
+
+    # Align RNA-seq samples to subject_data (AMC-ID index matches RNA-seq columns)
+    shared_samples = [s for s in subject_data.index if s in log_cpm_df.columns]
+    if not shared_samples:
+        shared_samples = list(log_cpm_df.columns)
+    pdata_shared = subject_data.loc[[s for s in shared_samples if s in subject_data.index]]
     col_pos = [list(log_cpm_df.columns).index(s) for s in shared_samples]
     lc_shared = log_cpm[:, col_pos]
     cell_props_shared = cell_props.loc[cell_props.index.intersection(pdata_shared.index)]
-    pdata_shared = pdata_shared.loc[cell_props_shared.index]
+    pdata_shared = pdata_shared.loc[pdata_shared.index.intersection(cell_props_shared.index)]
+    logger.info(
+        "RNA-seq alignment: %d samples shared (pdata_aug -> subject_data fix applied).",
+        len(pdata_shared),
+    )
 
     # (a) PRE DE
     pre_mask = (
@@ -109,8 +134,8 @@ def main() -> None:
     corrected_df.to_parquet(OUT_DIR / "rnaseq_corrected_emory.parquet")
     corrected_df.to_parquet(LATEST_DIR / "rnaseq_corrected_emory.parquet")
 
-    # (c) DELTA DE: pair using RNA-seq sample IDs from pdata_aug index
-    paired_rna, pre_in_rna, post_in_rna = filter_paired_ids_rna(pdata_aug)
+    # (c) DELTA DE: pair using RNA-seq sample IDs from subject_data index (AMC-IDs)
+    paired_rna, pre_in_rna, post_in_rna = filter_paired_ids_rna(subject_data)
     pre_in_rna = [s for s in pre_in_rna if s in log_cpm_df.columns]
     post_in_rna = [s for s in post_in_rna if s in log_cpm_df.columns]
     n_pairs = min(len(pre_in_rna), len(post_in_rna))
@@ -124,7 +149,7 @@ def main() -> None:
 
     delta_cell_fracs = cell_props.loc[post_in_rna].values - cell_props.loc[pre_in_rna].values
     delta_cf_df = pd.DataFrame(delta_cell_fracs, index=paired_rna, columns=cell_props.columns)
-    pdata_pre_paired = pdata_aug.loc[pre_in_rna].copy()
+    pdata_pre_paired = subject_data.loc[pre_in_rna].copy()
     pdata_pre_paired.index = pd.Index(paired_rna)
 
     logger.info("DE DELTA: %d paired subjects.", n_pairs)
