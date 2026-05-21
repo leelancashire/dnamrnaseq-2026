@@ -150,6 +150,7 @@ Implementation lives at `src/dnamrnaseq2026/preprocessing/delta_construction.py`
 - **PASS:** PERMANOVA p < 0.05 AND centroid-separation Cohen's d ≥ 0.3 on at least one of the first 5 PCs. Proceed with full trajectory-atlas build (Phase 1, Phase 2, Phase 3 unblocked).
 - **MARGINAL:** PERMANOVA p in [0.05, 0.15]. Proceed but flag in risk register; reconsider after Phase 1 cell-type-corrected outputs land.
 - **FAIL:** PERMANOVA p ≥ 0.15. Trajectory framing collapses. Pivot to v2.0 mediation-as-headline. The trajectory atlas demotes to a supplementary figure. Escalate to Lee for re-scoping meeting.
+- **Override (2026-05-21):** The cell-type-corrected re-run returned p = 0.154 (FAIL by 0.004), but Lee adjudicated this as a borderline soft-FAIL: the trajectory-atlas headline is retained provisionally, with Phase 3.3 TRD-proximity test as the binding go/no-go. See decision record: `99-admin/decisions/2026-05-21-gate-0t-soft-fail-adjudication.md`.
 
 ### Risks / gotchas
 
