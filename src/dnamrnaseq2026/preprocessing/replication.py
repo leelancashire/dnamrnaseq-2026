@@ -437,14 +437,11 @@ def summarise_replication(
     )
     pct = (n_replicated / n_tested * 100) if n_tested > 0 else 0.0
     verdict = "PASS" if pct >= 40.0 else "FAIL"
+    # Jointly drop rows where either beta is NaN to keep arrays aligned.
+    _both = overall[["emory_beta", "beta_best"]].dropna()
     spearman_rho = (
-        float(
-            stats.spearmanr(
-                overall["emory_beta"].dropna(),
-                overall["beta_best"].dropna(),
-            )[0]
-        )
-        if overall["emory_beta"].notna().sum() >= 5
+        float(stats.spearmanr(_both["emory_beta"], _both["beta_best"])[0])
+        if len(_both) >= 5
         else np.nan
     )
 

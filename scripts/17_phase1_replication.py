@@ -56,9 +56,17 @@ def main() -> None:
     celldmc_path = LATEST_DIR / "celldmc_delta_emory.tsv"
     if celldmc_path.exists():
         celldmc_delta = pd.read_csv(celldmc_path, sep="\t")
-        # Normalise: celldmc output uses 'cpg', downstream expects 'cpg_id'
+        # Normalise column names for v5 CellDMC output (run_celldmc.R naming):
+        #   cpg -> cpg_id; fdr -> q_interaction; coef -> beta_interaction
+        rename_map: dict[str, str] = {}
         if "cpg" in celldmc_delta.columns and "cpg_id" not in celldmc_delta.columns:
-            celldmc_delta = celldmc_delta.rename(columns={"cpg": "cpg_id"})
+            rename_map["cpg"] = "cpg_id"
+        if "fdr" in celldmc_delta.columns and "q_interaction" not in celldmc_delta.columns:
+            rename_map["fdr"] = "q_interaction"
+        if "coef" in celldmc_delta.columns and "beta_interaction" not in celldmc_delta.columns:
+            rename_map["coef"] = "beta_interaction"
+        if rename_map:
+            celldmc_delta = celldmc_delta.rename(columns=rename_map)
         logger.info("Loaded CellDMC delta: %d rows.", len(celldmc_delta))
     else:
         logger.warning("celldmc_delta_emory.tsv not found; using empty DataFrame.")
@@ -70,10 +78,13 @@ def main() -> None:
     if not celldmc_delta.empty and "q_interaction" in celldmc_delta.columns:
         sig_mask = celldmc_delta["q_interaction"].fillna(1.0) < 0.05
         sig_cpg_ids = list(celldmc_delta.loc[sig_mask, "cpg_id"].unique())
+        # Keep as DataFrame with 'cpg' and 'beta_interaction' columns for
+        # run_replication() which expects emory_betas.groupby("cpg")["beta_interaction"]
         emory_betas = (
             celldmc_delta.loc[sig_mask, ["cpg_id", "beta_interaction"]]
             .drop_duplicates("cpg_id")
-            .set_index("cpg_id")["beta_interaction"]
+            .rename(columns={"cpg_id": "cpg"})
+            .reset_index(drop=True)
         )
     else:
         sig_cpg_ids = []
