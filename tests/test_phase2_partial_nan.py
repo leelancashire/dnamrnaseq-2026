@@ -1,9 +1,10 @@
 """Partial-NaN contamination guard tests for the Phase 2 real-data loader.
 
-These run UNCONDITIONALLY in default CI -- they build a complete, minimal set
-of Phase 1 artefacts in ``tmp_path`` (no OneDrive, no ``analysis/latest/``),
-then corrupt one of them with *partial* NaN contamination and assert the loader
-fails loud.
+These run UNCONDITIONALLY in default CI -- no OneDrive, no ``analysis/latest/``,
+and crucially no parquet engine: the CI smoke-test job installs only pandas /
+numpy / scipy, not pyarrow. The synthetic activity matrices are therefore
+served in-memory by monkeypatching ``pandas.read_parquet``; only the small
+pData CSV touches disk (CSV needs no engine).
 
 Motivation: the upstream ``_read_activity`` stub guard uses
 ``np.isfinite(...).any()``, which rejects only an *entirely* non-finite
@@ -22,6 +23,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from dnamrnaseq2026.embedding import real_data
 from dnamrnaseq2026.embedding.real_data import (
     Phase1ArtefactError,
     Phase1Paths,
@@ -38,20 +40,55 @@ def _activity_keys() -> list[str]:
     return [f"{s}-{v}" for s in _SUBCODES for v in _RAW_VISITS]
 
 
-def _write_minimal_phase1(root, *, nan_mode: str) -> Phase1Paths:  # type: ignore[no-untyped-def]
-    """Write a complete minimal Phase 1 artefact set into ``root``.
+def _build_activity_frames(nan_mode: str) -> dict[str, pd.DataFrame]:
+    """Construct the in-memory PROGENy + TF activity frames.
 
     ``nan_mode``:
-      - ``"clean"``      -- all activity values finite (loader should succeed).
-      - ``"partial"``    -- one TF-activity cell finite, the rest NaN. This is
-                            the contamination the ``.any()`` guard misses.
-      - ``"all_nan"``    -- the entire TF-activity block NaN (the case the
-                            upstream guard already catches).
+      - ``"clean"``   -- all activity values finite (loader should succeed).
+      - ``"partial"`` -- one TF-activity cell finite, the rest NaN. This is the
+                         contamination the ``.any()`` guard misses.
+      - ``"all_nan"`` -- the entire TF-activity block NaN (the case the upstream
+                         guard already catches).
     """
     keys = _activity_keys()
     rng = np.random.default_rng(0)
 
-    # --- corrected pData (six samples, three paired subjects) ---
+    progeny = pd.DataFrame(
+        rng.standard_normal((len(keys), 3)),
+        index=keys,
+        columns=["PI3K", "TGFb", "TNFa"],
+    )
+    tf = pd.DataFrame(
+        rng.standard_normal((len(keys), 4)),
+        index=keys,
+        columns=["STAT1", "NFKB1", "JUN", "FOS"],
+    )
+    if nan_mode == "partial":
+        # One finite cell, everything else NaN -> passes np.isfinite(...).any()
+        # but is unusable. This is the case the all-NaN guard misses.
+        finite_cell = tf.iloc[0, 0]
+        tf.loc[:, :] = np.nan
+        tf.iloc[0, 0] = finite_cell
+    elif nan_mode == "all_nan":
+        tf.loc[:, :] = np.nan
+    elif nan_mode != "clean":
+        raise ValueError(f"unknown nan_mode {nan_mode!r}")
+    return {
+        "progeny_activity_emory.parquet": progeny,
+        "tf_activity_emory.parquet": tf,
+    }
+
+
+def _setup_phase1(tmp_path, monkeypatch, *, nan_mode):  # type: ignore[no-untyped-def]
+    """Write the pData CSV, register in-memory activity frames, return Phase1Paths.
+
+    The activity parquets are created as empty placeholder files so the loader's
+    existence / non-zero-size check passes; ``pandas.read_parquet`` is then
+    monkeypatched to return the in-memory frame for whichever placeholder is
+    read. This keeps the test free of any parquet-engine dependency.
+    """
+    rng = np.random.default_rng(1)
+
     pdata = pd.DataFrame(
         {
             "Subcode": [s for s in _SUBCODES for _ in _RAW_VISITS],
@@ -69,45 +106,31 @@ def _write_minimal_phase1(root, *, nan_mode: str) -> Phase1Paths:  # type: ignor
             "epidish_Eosino": rng.uniform(0.01, 0.05, size=6),
         }
     )
-    pdata.to_csv(root / "pdata_emory_with_epidish.csv", index=False)
+    pdata.to_csv(tmp_path / "pdata_emory_with_epidish.csv", index=False)
 
-    # --- PROGENy activity: always clean (3 pathways) ---
-    progeny = pd.DataFrame(
-        rng.standard_normal((len(keys), 3)),
-        index=keys,
-        columns=["PI3K", "TGFb", "TNFa"],
-    )
-    progeny.to_parquet(root / "progeny_activity_emory.parquet")
+    frames = _build_activity_frames(nan_mode)
+    for name in frames:
+        # Non-empty placeholder so _require's size check passes; the bytes are
+        # never parsed because read_parquet is monkeypatched below.
+        (tmp_path / name).write_bytes(b"placeholder")
 
-    # --- TF activity: clean / partial-NaN / all-NaN per nan_mode ---
-    tf = pd.DataFrame(
-        rng.standard_normal((len(keys), 4)),
-        index=keys,
-        columns=["STAT1", "NFKB1", "JUN", "FOS"],
-    )
-    if nan_mode == "partial":
-        # One finite cell, everything else NaN -> passes np.isfinite(...).any()
-        # but is unusable. This is the case the all-NaN guard misses.
-        finite_cell = tf.iloc[0, 0]
-        tf.loc[:, :] = np.nan
-        tf.iloc[0, 0] = finite_cell
-    elif nan_mode == "all_nan":
-        tf.loc[:, :] = np.nan
-    elif nan_mode != "clean":
-        raise ValueError(f"unknown nan_mode {nan_mode!r}")
-    tf.to_parquet(root / "tf_activity_emory.parquet")
+    def _fake_read_parquet(path, *args, **kwargs):  # type: ignore[no-untyped-def]
+        from pathlib import Path as _Path
 
-    return Phase1Paths(root=root)
+        return frames[_Path(path).name].copy()
+
+    monkeypatch.setattr(real_data.pd, "read_parquet", _fake_read_parquet)
+    return Phase1Paths(root=tmp_path)
 
 
-def test_partial_nan_activity_raises_named_error(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_partial_nan_activity_raises_named_error(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """A partially-NaN TF-activity parquet must fail loud, naming the artefact.
 
     This is the gap Helen flagged: the all-NaN guard (``.any()``) lets a single
     finite cell through. The ``build_arm_inputs`` finite assertion must catch
-    it. Runs in default CI -- no ``analysis/latest/`` required.
+    it. Runs in default CI -- no ``analysis/latest/``, no parquet engine.
     """
-    paths = _write_minimal_phase1(tmp_path, nan_mode="partial")
+    paths = _setup_phase1(tmp_path, monkeypatch, nan_mode="partial")
     with pytest.raises(Phase1ArtefactError) as excinfo:
         build_arm_inputs(paths)
     msg = str(excinfo.value).lower()
@@ -116,19 +139,19 @@ def test_partial_nan_activity_raises_named_error(tmp_path) -> None:  # type: ign
     assert "pre" in msg or "post" in msg
 
 
-def test_all_nan_activity_still_caught(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_all_nan_activity_still_caught(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """The pre-existing all-NaN stub case stays covered (no regression)."""
-    paths = _write_minimal_phase1(tmp_path, nan_mode="all_nan")
+    paths = _setup_phase1(tmp_path, monkeypatch, nan_mode="all_nan")
     with pytest.raises(Phase1ArtefactError):
         build_arm_inputs(paths)
 
 
-def test_clean_activity_assembles_finite_inputs(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_clean_activity_assembles_finite_inputs(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """With clean artefacts the loader assembles finite paired inputs.
 
     Confirms the new finite assertion does not false-positive on good data.
     """
-    paths = _write_minimal_phase1(tmp_path, nan_mode="clean")
+    paths = _setup_phase1(tmp_path, monkeypatch, nan_mode="clean")
     inputs = build_arm_inputs(paths)
     assert inputs.paired.n_subjects == 3
     assert np.isfinite(inputs.paired.x_pre).all()
