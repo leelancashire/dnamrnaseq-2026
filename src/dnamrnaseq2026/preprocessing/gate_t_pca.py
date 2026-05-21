@@ -93,8 +93,12 @@ def compute_cohens_d_per_pc(
 
     cohens_d: dict[str, float] = {}
     for col in pc_scores.columns:
-        r_vals = pc_scores.loc[r_mask, col].dropna().values
-        nr_vals = pc_scores.loc[nr_mask, col].dropna().values
+        r_vals: np.ndarray[Any, Any] = np.asarray(
+            pc_scores.loc[r_mask, col].dropna().to_numpy(), dtype=float
+        )
+        nr_vals: np.ndarray[Any, Any] = np.asarray(
+            pc_scores.loc[nr_mask, col].dropna().to_numpy(), dtype=float
+        )
         if len(r_vals) < 2 or len(nr_vals) < 2:
             cohens_d[col] = 0.0
             continue
@@ -144,8 +148,8 @@ def run_permanova(
     """
     aligned = response.reindex(pc_scores.index).dropna()
     valid_subjects = aligned.index
-    scores = pc_scores.loc[valid_subjects].values
-    labels = aligned.values
+    scores: np.ndarray[Any, Any] = np.asarray(pc_scores.loc[valid_subjects].to_numpy(), dtype=float)
+    labels: np.ndarray[Any, Any] = np.asarray(aligned.to_numpy())
 
     def pseudo_f(
         sc: np.ndarray[Any, np.dtype[np.float64]],

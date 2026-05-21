@@ -133,12 +133,13 @@ def run_tf_ulm(
 
         mat = pd.DataFrame(log_cpm.T, index=sample_ids, columns=gene_ids)
         estimates, _ = decoupler.run_ulm(mat=mat, net=net, verbose=False)
+        result_df: pd.DataFrame = pd.DataFrame(estimates)
         logger.info(
             "CollecTRI ULM complete: %d samples x %d TFs.",
-            estimates.shape[0],
-            estimates.shape[1],
+            result_df.shape[0],
+            result_df.shape[1],
         )
-        return estimates
+        return result_df
     except ImportError:
         logger.warning("decoupler not available; returning NaN TF activity matrix.")
         tfs = net["source"].unique().tolist() if not net.empty else ["TF_0"]
@@ -222,11 +223,14 @@ def test_tf_response_association(
 
     shared_idx = delta_activity.index.intersection(pdata_sub.index)
     da_sub = delta_activity.loc[shared_idx]
-    resp_aligned = pd.Series(resp_enc, index=pdata_sub.index).loc[shared_idx].values
+    resp_aligned: np.ndarray[Any, Any] = np.asarray(
+        pd.Series(resp_enc, index=pdata_sub.index).loc[shared_idx].values,
+        dtype=float,
+    )
 
     cov_cols = [c for c in (extra_covariates or []) if c in pdata_sub.columns]
     cov_matrix = (
-        pdata_sub.loc[shared_idx, cov_cols].fillna(0).values.astype(float)
+        pdata_sub.loc[shared_idx, cov_cols].fillna(0).to_numpy().astype(float)
         if cov_cols
         else np.empty((len(shared_idx), 0))
     )

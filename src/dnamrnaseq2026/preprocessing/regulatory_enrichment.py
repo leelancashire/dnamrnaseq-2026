@@ -108,12 +108,12 @@ def count_cpg_overlaps(
             pass  # fall through to numpy
 
     return _count_overlaps_numpy(
-        sig_cpg_bed["chrom"].values,
-        sig_cpg_bed["start"].values,
-        sig_cpg_bed["end"].values,
-        feature_bed["chrom"].values,
-        feature_bed["start"].values,
-        feature_bed["end"].values,
+        np.asarray(sig_cpg_bed["chrom"].to_numpy()),
+        np.asarray(sig_cpg_bed["start"].to_numpy()),
+        np.asarray(sig_cpg_bed["end"].to_numpy()),
+        np.asarray(feature_bed["chrom"].to_numpy()),
+        np.asarray(feature_bed["start"].to_numpy()),
+        np.asarray(feature_bed["end"].to_numpy()),
     )
 
 

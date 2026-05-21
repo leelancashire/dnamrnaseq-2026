@@ -96,12 +96,13 @@ def run_progeny_ulm(
 
         mat = pd.DataFrame(log_cpm.T, index=sample_ids, columns=gene_ids)
         estimates, pvals = decoupler.run_ulm(mat=mat, net=net, verbose=False)
+        result_df: pd.DataFrame = pd.DataFrame(estimates)
         logger.info(
             "PROGENy ULM complete: %d samples x %d pathways.",
-            estimates.shape[0],
-            estimates.shape[1],
+            result_df.shape[0],
+            result_df.shape[1],
         )
-        return estimates
+        return result_df
     except ImportError:
         logger.warning("decoupler not available; returning NaN activity matrix.")
         pathways = net["source"].unique().tolist() if not net.empty else ["TNFa"]
@@ -173,8 +174,9 @@ def run_gsva(
 
         mat = pd.DataFrame(log_cpm.T, index=sample_ids, columns=gene_ids)
         estimates, _ = decoupler.run_gsva(mat=mat, net=net, verbose=False)
-        logger.info("GSVA (decoupler) complete: %d samples x %d sets.", *estimates.shape)
-        return estimates
+        gsva_df: pd.DataFrame = pd.DataFrame(estimates)
+        logger.info("GSVA (decoupler) complete: %d samples x %d sets.", *gsva_df.shape)
+        return gsva_df
 
     except (ImportError, AttributeError):
         pass
@@ -184,7 +186,9 @@ def run_gsva(
 
         mat_df = pd.DataFrame(log_cpm, index=gene_ids, columns=sample_ids)
         result = gseapy.ssgsea(data=mat_df, gene_sets=filtered_sets, outdir=None, no_plot=True)
-        scores = result.res2d.pivot(index="Name", columns="Term", values="ES")
+        scores: pd.DataFrame = pd.DataFrame(
+            result.res2d.pivot(index="Name", columns="Term", values="ES")
+        )
         logger.info("GSVA (gseapy ssGSEA) complete.")
         return scores.T
 
@@ -264,20 +268,24 @@ def test_response_association(
     resp_raw = pdata[response_col].astype(str).str.strip().str.upper()
     valid_mask = resp_raw.isin(["R", "NR", "RESPONDER", "NON-RESPONDER", "0", "1"])
     pdata_sub = pdata[valid_mask]
-    resp_enc = (
+    resp_enc: np.ndarray[Any, Any] = np.asarray(
         resp_raw[valid_mask]
         .map({"R": 1, "NR": 0, "RESPONDER": 1, "NON-RESPONDER": 0, "1": 1, "0": 0})
-        .values.astype(float)
+        .to_numpy(),
+        dtype=float,
     )
 
     shared_idx = activity.index.intersection(pdata_sub.index)
     act_sub = activity.loc[shared_idx]
-    resp_aligned = pd.Series(resp_enc, index=pdata_sub.index).loc[shared_idx].values
+    resp_aligned: np.ndarray[Any, Any] = np.asarray(
+        pd.Series(resp_enc, index=pdata_sub.index).loc[shared_idx].to_numpy(),
+        dtype=float,
+    )
 
     cov_cols = extra_covariates or []
     cov_cols = [c for c in cov_cols if c in pdata_sub.columns]
     cov_matrix = (
-        pdata_sub.loc[shared_idx, cov_cols].fillna(0).values.astype(float)
+        pdata_sub.loc[shared_idx, cov_cols].fillna(0).to_numpy().astype(float)
         if cov_cols
         else np.empty((len(shared_idx), 0))
     )

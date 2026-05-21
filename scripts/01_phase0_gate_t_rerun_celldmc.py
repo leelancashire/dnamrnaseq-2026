@@ -79,7 +79,6 @@ def main() -> None:
     from dnamrnaseq2026.preprocessing.cell_type_correction import beta_to_m
     from dnamrnaseq2026.preprocessing.delta_construction import (
         filter_paired_ids,
-        filter_paired_ids_rna,
         identify_paired_subjects,
     )
     from dnamrnaseq2026.preprocessing.gate_t_rerun_celldmc import (
@@ -119,23 +118,23 @@ def main() -> None:
     # RNA-seq and subject pairing use AMC-IDs (Subcode).  Build SentrixID->AMC-ID
     # map from pdata "Subcode" column (canonical source after load_cohort.R rewrite).
     # Fallback: if pdata index already aligns with cell_props, no remap needed.
-    if "Subcode" in pdata_aug.columns and len(
-        pdata_aug.index.intersection(cell_props_raw.index)
-    ) > 0:
+    if (
+        "Subcode" in pdata_aug.columns
+        and len(pdata_aug.index.intersection(cell_props_raw.index)) > 0
+    ):
         # pdata index and cell_props index are both SentrixIDs.
         # Map: SentrixID -> AMC-ID via Subcode column.
         sentrix_to_amc = pdata_aug["Subcode"].dropna()
-        cell_props = cell_props_raw.reindex(sentrix_to_amc.index).set_axis(
-            sentrix_to_amc.values
-        )
+        cell_props = cell_props_raw.reindex(sentrix_to_amc.index).set_axis(sentrix_to_amc.values)
         cell_props = cell_props[~cell_props.index.duplicated(keep="first")]
         logger.info(
             "Remapped cell_props from SentrixID -> AMC-ID (via Subcode): %d rows aligned.",
             int(cell_props.notna().any(axis=1).sum()),
         )
-    elif "SampleName_DNAm" in pdata_aug.columns and len(
-        pdata_aug.index.intersection(cell_props_raw.index)
-    ) == 0:
+    elif (
+        "SampleName_DNAm" in pdata_aug.columns
+        and len(pdata_aug.index.intersection(cell_props_raw.index)) == 0
+    ):
         dnam_map = pdata_aug["SampleName_DNAm"].dropna()
         cell_props = cell_props_raw.reindex(dnam_map.values).set_axis(dnam_map.index)
         logger.info(
@@ -175,8 +174,7 @@ def main() -> None:
     valid_pairs = [
         (sc, p, q, pr, po)
         for sc, p, q, pr, po in zip(
-            paired_rna, pre_rna_subcode, post_rna_subcode,
-            pre_rna, post_rna, strict=False
+            paired_rna, pre_rna_subcode, post_rna_subcode, pre_rna, post_rna, strict=False
         )
         if p in cell_props.index
         and q in cell_props.index
