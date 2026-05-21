@@ -89,7 +89,10 @@ BETA_RANGE_FLOOR = 0.05
 # Provenance marker stamped on the Tier 2 candidate matrices. The matrices are
 # biology-filtered candidate sets only; the data-driven variance / HVG ranking
 # is fit per fold by PairedPreprocessor (design doc Section 4.2 leakage rule).
-# A loader must refuse to feed a cv_loop_safe=False matrix into the CV loop.
+# This stamp is ENFORCED consumer-side: feature_selection.assert_cv_loop_safe
+# (called by load_feature_matrix_for_cv, the canonical on-disk-matrix loader)
+# raises Phase1ArtefactError when cv_loop_safe is False, so a candidate matrix
+# cannot be fed into a CV / training path.
 TIER2_PROVENANCE = {
     "selection_stage": "EDA_ONLY",
     "cv_loop_safe": "False",
