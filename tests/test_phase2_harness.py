@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 from dnamrnaseq2026.embedding.data_harness import (
+    PairedPreprocessor,
     build_paired_dataset,
     inner_calibration_split,
     normalise_visit,
@@ -110,6 +111,55 @@ def test_variance_filter_rna_top_n() -> None:
     )
     selected = variance_filter_rna(expr, top_n=50)
     assert len(selected) == 50
+
+
+def test_paired_preprocessor_selection_uses_training_fold_only() -> None:
+    """Tier 2 variance/HVG ranking is fit on the training fold, not the full set.
+
+    Design Section 4.2 hard rule: ranking on the full cohort lets held-out test
+    rows decide which features exist. This builds data where the top-variance
+    features DIFFER between the training subset and the full set, then asserts
+    the preprocessor's selection follows the training subset.
+    """
+    rng = np.random.default_rng(11)
+    n_samples, n_dnam, n_rna = 40, 12, 12
+    dnam = pd.DataFrame(
+        rng.standard_normal((n_samples, n_dnam)),
+        columns=[f"cg{i:02d}" for i in range(n_dnam)],
+    )
+    rna = pd.DataFrame(
+        rng.standard_normal((n_samples, n_rna)),
+        columns=[f"GENE{i:02d}" for i in range(n_rna)],
+    )
+    train_idx = np.arange(20)
+    test_idx = np.arange(20, 40)
+    # Inflate variance of two features ONLY in the test-fold rows. If selection
+    # leaked, these would rank top; fit on the training fold, they must not.
+    dnam.iloc[test_idx, 0] *= 50.0
+    rna.iloc[test_idx, 0] *= 50.0
+
+    prep = PairedPreprocessor(tier2_dnam_top=4, tier2_rna_top=4)
+    prep.fit(dnam.iloc[train_idx], rna.iloc[train_idx])
+
+    assert len(prep.dnam_features) == 4
+    assert len(prep.rna_features) == 4
+    # The test-fold-inflated feature must NOT be selected -- that would be a leak.
+    assert "cg00" not in prep.dnam_features
+    assert "GENE00" not in prep.rna_features
+
+    # transform applies the frozen training selection to the held-out fold.
+    dnam_te, rna_te = prep.transform(dnam.iloc[test_idx], rna.iloc[test_idx])
+    assert list(dnam_te.columns) == prep.dnam_features
+    assert list(rna_te.columns) == prep.rna_features
+    assert dnam_te.shape == (20, 4)
+
+
+def test_paired_preprocessor_transform_before_fit_raises() -> None:
+    """transform before fit is a programming error and must fail loud."""
+    prep = PairedPreprocessor()
+    empty = pd.DataFrame()
+    with pytest.raises(RuntimeError, match="before fit"):
+        prep.transform(empty, empty)
 
 
 def test_resolve_feature_tier_falls_back_to_tier2(tmp_path: object) -> None:
