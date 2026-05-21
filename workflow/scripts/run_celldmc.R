@@ -203,13 +203,25 @@ if (is.character(pheno_raw) || is.factor(pheno_raw)) {
 
 names(pheno_vec) <- common_samples
 
+# Drop NA phenotype samples. CellDMC rejects any NA in pheno.v.
+na_mask <- is.na(pheno_vec)
+if (any(na_mask)) {
+  n_dropped <- sum(na_mask)
+  cat(sprintf("[run_celldmc] Dropping %d samples with NA phenotype.\n", n_dropped))
+  keep_pheno <- !na_mask
+  pheno_vec  <- pheno_vec[keep_pheno]
+  frac_mat   <- frac_mat[names(pheno_vec), , drop = FALSE]
+  beta_mat   <- beta_mat[, names(pheno_vec), drop = FALSE]
+  pdata      <- pdata[names(pheno_vec), , drop = FALSE]
+  cat(sprintf("[run_celldmc] After NA drop: %d samples retained.\n", length(pheno_vec)))
+}
+
 if (var(pheno_vec, na.rm = TRUE) < 1e-8) {
   stop("[run_celldmc] FATAL: Phenotype vector is constant. CellDMC cannot run.")
 }
 
 cat(sprintf("[run_celldmc] Phenotype: N=%d, mean=%.3f, var=%.3f\n",
-            sum(!is.na(pheno_vec)), mean(pheno_vec, na.rm = TRUE),
-            var(pheno_vec, na.rm = TRUE)))
+            length(pheno_vec), mean(pheno_vec), var(pheno_vec)))
 
 # ---------------------------------------------------------------------------
 # Covariate matrix
