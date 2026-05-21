@@ -73,6 +73,10 @@ def _encode_covariates(df: pd.DataFrame) -> np.ndarray[Any, Any]:
 
             le = LabelEncoder()
             valid = encoded[col].notna()
+            # Convert to object dtype first: pandas 3.x StringDtype rejects
+            # integer assignment via .loc, so we must widen to object before
+            # writing the label-encoded integers back.
+            encoded[col] = encoded[col].astype(object)
             encoded.loc[valid, col] = le.fit_transform(encoded.loc[valid, col].astype(str))
             encoded[col] = pd.to_numeric(encoded[col], errors="coerce")
     # numeric_only=True: skip any residual non-numeric columns during NaN imputation.
@@ -370,8 +374,10 @@ def run_celldmc(
     shared_idx = pdata.index[pdata.index.isin(pdata_sub.index)]
     col_pos = [list(pdata.index).index(i) for i in shared_idx]
     m_sub = m_matrix[:, col_pos]
-    cell_fracs_aligned = cell_fracs_sub.loc[shared_idx].values.astype(float)
-    response_arr = resp_encoded.loc[shared_idx].values
+    cell_fracs_aligned = cell_fracs_sub.loc[shared_idx].to_numpy().astype(float)
+    response_arr: np.ndarray[Any, Any] = np.asarray(
+        resp_encoded.loc[shared_idx].to_numpy(), dtype=float
+    )
 
     # Build covariate matrix (encode categoricals to numeric)
     cov_cols = [c for c in COVARIATE_COLS_PREFERRED if c in pdata_sub.columns]

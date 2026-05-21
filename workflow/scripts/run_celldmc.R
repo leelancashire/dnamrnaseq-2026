@@ -203,13 +203,25 @@ if (is.character(pheno_raw) || is.factor(pheno_raw)) {
 
 names(pheno_vec) <- common_samples
 
+# Drop NA phenotype samples. CellDMC rejects any NA in pheno.v.
+na_mask <- is.na(pheno_vec)
+if (any(na_mask)) {
+  n_dropped <- sum(na_mask)
+  cat(sprintf("[run_celldmc] Dropping %d samples with NA phenotype.\n", n_dropped))
+  keep_pheno <- !na_mask
+  pheno_vec  <- pheno_vec[keep_pheno]
+  frac_mat   <- frac_mat[names(pheno_vec), , drop = FALSE]
+  beta_mat   <- beta_mat[, names(pheno_vec), drop = FALSE]
+  pdata      <- pdata[names(pheno_vec), , drop = FALSE]
+  cat(sprintf("[run_celldmc] After NA drop: %d samples retained.\n", length(pheno_vec)))
+}
+
 if (var(pheno_vec, na.rm = TRUE) < 1e-8) {
   stop("[run_celldmc] FATAL: Phenotype vector is constant. CellDMC cannot run.")
 }
 
 cat(sprintf("[run_celldmc] Phenotype: N=%d, mean=%.3f, var=%.3f\n",
-            sum(!is.na(pheno_vec)), mean(pheno_vec, na.rm = TRUE),
-            var(pheno_vec, na.rm = TRUE)))
+            length(pheno_vec), mean(pheno_vec), var(pheno_vec)))
 
 # ---------------------------------------------------------------------------
 # Covariate matrix
@@ -272,9 +284,12 @@ celldmc_out <- CellDMC(
   mc.cores   = opt$ncore
 )
 
-# CellDMC returns:
+# CellDMC 2.16.0 returns:
 #   $coe  : list of data.frames, one per cell type. Each has columns:
-#            Estimate, SE, t, p-value, Adjusted.P.Value
+#            Estimate, SE, t, p, adjP
+#   NOTE: earlier versions of this script incorrectly used "p-value" and
+#   "Adjusted.P.Value". Those column names do not exist in EpiDISH 2.16.0.
+#   The real column names are "p" and "adjP" (confirmed interactively 2026-05-21).
 cat("[run_celldmc] CellDMC complete. Collating results...\n")
 
 cell_types <- names(celldmc_out$coe)
@@ -284,15 +299,17 @@ cat(sprintf("[run_celldmc] Cell types in output: %s\n",
 # Collate into a long-format TSV: cpg x cell_type rows
 result_list <- lapply(cell_types, function(ct) {
   df <- celldmc_out$coe[[ct]]
+  # Column names in EpiDISH 2.16.0 CellDMC $coe output: Estimate, SE, t, p, adjP.
+  # (NOT "p-value" or "Adjusted.P.Value" -- those caused Bug 6 / the differing-rows crash.)
   data.frame(
     cpg       = rownames(df),
     cell_type = ct,
     coef      = df[["Estimate"]],
     se        = df[["SE"]],
     t_stat    = df[["t"]],
-    p_val     = df[["p-value"]],
-    fdr       = df[["Adjusted.P.Value"]],
-    sig       = df[["Adjusted.P.Value"]] < opt$fdr,
+    p_val     = df[["p"]],
+    fdr       = df[["adjP"]],
+    sig       = df[["adjP"]] < opt$fdr,
     stringsAsFactors = FALSE
   )
 })

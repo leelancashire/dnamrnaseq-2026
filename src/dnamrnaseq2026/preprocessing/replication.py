@@ -262,10 +262,11 @@ def run_replication(
     resp_raw = pdata_best_paired[response_col].astype(str).str.strip().str.upper()
     valid_mask = resp_raw.isin(["R", "NR", "RESPONDER", "NON-RESPONDER", "0", "1"])
     pdata_sub = pdata_best_paired[valid_mask]
-    resp_enc = (
+    resp_enc: np.ndarray[Any, Any] = np.asarray(
         resp_raw[valid_mask]
         .map({"R": 1, "NR": 0, "RESPONDER": 1, "NON-RESPONDER": 0, "1": 1, "0": 0})
-        .values.astype(float)
+        .to_numpy(),
+        dtype=float,
     )
 
     col_pos_all = list(pdata_best_paired.index)
@@ -283,7 +284,7 @@ def run_replication(
     emory_beta_map: dict[str, float] = {}
     if not emory_betas.empty and "cpg" in emory_betas.columns:
         grp = emory_betas.groupby("cpg")["beta_interaction"].mean()
-        emory_beta_map = grp.to_dict()
+        emory_beta_map = {str(k): float(v) for k, v in grp.items()}
 
     def process_cpg(ci: int) -> dict[str, Any]:
         cpg = kept_cpg_ids[ci]
@@ -319,15 +320,16 @@ def run_replication(
             if mod_resp_mask.sum() < 5:
                 continue
             pdata_mod = pdata_best_paired[mod_resp_mask]
-            resp_mod = (
+            resp_mod: np.ndarray[Any, Any] = np.asarray(
                 resp_raw[mod_resp_mask]
                 .map({"R": 1, "NR": 0, "RESPONDER": 1, "NON-RESPONDER": 0, "1": 1, "0": 0})
-                .values.astype(float)
+                .to_numpy(),
+                dtype=float,
             )
             col_pos_mod = [col_pos_all.index(s) for s in pdata_mod.index]
             dm_mod = delta_m_best[:, col_pos_mod]
             cov_mod = (
-                pdata_mod[cov_cols].fillna(0).values.astype(float)
+                pdata_mod[cov_cols].fillna(0).to_numpy().astype(float)
                 if cov_cols
                 else np.empty((len(pdata_mod), 0))
             )
@@ -358,7 +360,9 @@ def run_replication(
 
         therapy_vals = pdata_best_paired.loc[pdata_sub.index, therapy_col].astype(str).str.strip()
         # Encode therapy: CPT=1, others=0 for binary interaction
-        therapy_enc = (therapy_vals.str.upper() == "CPT").astype(float).values
+        therapy_enc: np.ndarray[Any, Any] = np.asarray(
+            (therapy_vals.str.upper() == "CPT").to_numpy(), dtype=float
+        )
 
         for ci, cpg in enumerate(kept_cpg_ids):
             y = dm_sub[ci]
@@ -437,14 +441,11 @@ def summarise_replication(
     )
     pct = (n_replicated / n_tested * 100) if n_tested > 0 else 0.0
     verdict = "PASS" if pct >= 40.0 else "FAIL"
+    # Jointly drop rows where either beta is NaN to keep arrays aligned.
+    _both = overall[["emory_beta", "beta_best"]].dropna()
     spearman_rho = (
-        float(
-            stats.spearmanr(
-                overall["emory_beta"].dropna(),
-                overall["beta_best"].dropna(),
-            )[0]
-        )
-        if overall["emory_beta"].notna().sum() >= 5
+        float(stats.spearmanr(_both["emory_beta"], _both["beta_best"])[0])
+        if len(_both) >= 5
         else np.nan
     )
 

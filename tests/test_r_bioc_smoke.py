@@ -182,13 +182,26 @@ class TestRBiocEnvSetup:
         assert "methylclock OK" in result.stdout
 
     def test_epidish_reference_panels_ship_with_package(self) -> None:
-        """Reference panels centEpicV2, centEpicV1, centBloodSub are available via data()."""
+        """centDHSbloodDMC.m (project default) and cent12CT.m are available via data().
+
+        NOTE: centEpicV2 and centEpicV1 do NOT exist in EpiDISH 2.16.0. This test
+        was updated from the original centEpicV2 check (which would always fail)
+        to validate the actual reference panels present in this version.
+        """
         r_script = textwrap.dedent("""
             library(EpiDISH)
-            data(centEpicV2, package='EpiDISH', envir=environment())
-            stopifnot(exists('centEpicV2'))
-            cat(sprintf('centEpicV2 %d CpGs x %d cell types\\n',
-                        nrow(centEpicV2), ncol(centEpicV2)))
+            # centDHSbloodDMC.m: project default (333 CpGs, 7 types)
+            data(centDHSbloodDMC.m, package='EpiDISH', envir=environment())
+            stopifnot(exists('centDHSbloodDMC.m'))
+            mat <- get('centDHSbloodDMC.m')
+            cat(sprintf('centDHSbloodDMC.m %d CpGs x %d cell types\\n',
+                        nrow(mat), ncol(mat)))
+            # cent12CT.m: alternative high-resolution reference
+            data(cent12CT.m, package='EpiDISH', envir=environment())
+            stopifnot(exists('cent12CT.m'))
+            mat12 <- get('cent12CT.m')
+            cat(sprintf('cent12CT.m %d CpGs x %d cell types\\n',
+                        nrow(mat12), ncol(mat12)))
             cat('PANELS OK\\n')
         """)
         result = subprocess.run(
@@ -228,7 +241,7 @@ class TestRunEpiDISHScript:
                 "--output",
                 str(out_path),
                 "--ref",
-                "centEpicV2",
+                "centDHSbloodDMC.m",
                 "--method",
                 "RPC",
             ],
@@ -256,15 +269,15 @@ class TestRunEpiDISHScript:
 
         # Row sums approx 1
         row_sums = df.sum(axis=1)
-        assert (
-            abs(row_sums - 1.0) < 0.05
-        ).all(), f"Row sums deviate from 1.0: {row_sums.describe()}"
+        assert (abs(row_sums - 1.0) < 0.05).all(), (
+            f"Row sums deviate from 1.0: {row_sums.describe()}"
+        )
 
         # No constant columns (the Phase 1 failure mode)
         col_vars = df.var(axis=0)
-        assert (
-            col_vars > 1e-8
-        ).all(), f"Constant cell-type columns detected: {col_vars[col_vars <= 1e-8].index.tolist()}"
+        assert (col_vars > 1e-8).all(), (
+            f"Constant cell-type columns detected: {col_vars[col_vars <= 1e-8].index.tolist()}"
+        )
 
     def test_epidish_rejects_non_beta_values(self, tmp_path: Path) -> None:
         """run_epidish.R exits non-zero when input contains M-values (range outside [0,1])."""
@@ -295,9 +308,9 @@ class TestRunEpiDISHScript:
             text=True,
         )
 
-        assert (
-            result.returncode != 0
-        ), "run_epidish.R should have rejected M-values (out-of-range betas)"
+        assert result.returncode != 0, (
+            "run_epidish.R should have rejected M-values (out-of-range betas)"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -366,9 +379,9 @@ class TestRunCellDMCScript:
         assert len(df) > 0, "CellDMC output is empty"
 
         # One row per (CpG, cell-type) pair
-        assert (
-            df["cell_type"].nunique() >= 5
-        ), f"Expected >=5 cell types, got {df['cell_type'].nunique()}"
+        assert df["cell_type"].nunique() >= 5, (
+            f"Expected >=5 cell types, got {df['cell_type'].nunique()}"
+        )
 
         # p-values in [0, 1]
         assert (df["p_val"].dropna() >= 0).all(), "Negative p-values in CellDMC output"
@@ -419,6 +432,6 @@ class TestRunCellDMCScript:
             text=True,
         )
 
-        assert (
-            result.returncode != 0
-        ), "run_celldmc.R should have rejected a constant phenotype vector"
+        assert result.returncode != 0, (
+            "run_celldmc.R should have rejected a constant phenotype vector"
+        )

@@ -216,8 +216,8 @@ def main() -> None:
     ax.legend(handles=legend_elements, loc="upper right")
 
     ev = pca.explained_variance_ratio_
-    ax.set_xlabel(f"PC1 ({ev[0]*100:.1f}% var)")
-    ax.set_ylabel(f"PC2 ({ev[1]*100:.1f}% var)" if len(ev) > 1 else "PC2")
+    ax.set_xlabel(f"PC1 ({ev[0] * 100:.1f}% var)")
+    ax.set_ylabel(f"PC2 ({ev[1] * 100:.1f}% var)" if len(ev) > 1 else "PC2")
     ax.set_title(
         f"Gate 0-T: Emory Δ-vector PCA\n"
         f"PERMANOVA p={permanova['p_value']:.3f}, max Cohen's d={max(cohens_d.values()):.3f}\n"

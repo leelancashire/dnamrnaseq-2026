@@ -10,6 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+
 from dnamrnaseq2026.embedding.data_harness import (
     build_paired_dataset,
     inner_calibration_split,
@@ -21,7 +22,6 @@ from dnamrnaseq2026.embedding.feature_selection import (
     variance_filter_dnam,
     variance_filter_rna,
 )
-
 from tests.phase2_fixtures import make_synthetic_sample_frame
 
 

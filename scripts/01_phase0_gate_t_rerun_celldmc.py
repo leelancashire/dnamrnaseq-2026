@@ -70,6 +70,7 @@ def main() -> None:
 
     import numpy as np
     import pandas as pd
+
     from dnamrnaseq2026.data.config import load_config
     from dnamrnaseq2026.data.loaders import (
         load_emory_bvals,
@@ -79,7 +80,6 @@ def main() -> None:
     from dnamrnaseq2026.preprocessing.cell_type_correction import beta_to_m
     from dnamrnaseq2026.preprocessing.delta_construction import (
         filter_paired_ids,
-        filter_paired_ids_rna,
         identify_paired_subjects,
     )
     from dnamrnaseq2026.preprocessing.gate_t_rerun_celldmc import (
@@ -115,15 +115,31 @@ def main() -> None:
     cell_props_raw = pd.read_csv(CELL_PROPS_PATH, index_col=0)
     pdata_aug = pd.read_csv(PDATA_AUG_PATH, index_col=0)
 
-    # Cell-props remap: handle SentrixID vs AMC-ID index just like step 1.2 does.
+    # Cell-props remap: cell_props_raw index is SentrixIDs (from run_epidish.R output).
+    # RNA-seq and subject pairing use AMC-IDs (Subcode).  Build SentrixID->AMC-ID
+    # map from pdata "Subcode" column (canonical source after load_cohort.R rewrite).
+    # Fallback: if pdata index already aligns with cell_props, no remap needed.
     if (
+        "Subcode" in pdata_aug.columns
+        and len(pdata_aug.index.intersection(cell_props_raw.index)) > 0
+    ):
+        # pdata index and cell_props index are both SentrixIDs.
+        # Map: SentrixID -> AMC-ID via Subcode column.
+        sentrix_to_amc = pdata_aug["Subcode"].dropna()
+        cell_props = cell_props_raw.reindex(sentrix_to_amc.index).set_axis(sentrix_to_amc.values)
+        cell_props = cell_props[~cell_props.index.duplicated(keep="first")]
+        logger.info(
+            "Remapped cell_props from SentrixID -> AMC-ID (via Subcode): %d rows aligned.",
+            int(cell_props.notna().any(axis=1).sum()),
+        )
+    elif (
         "SampleName_DNAm" in pdata_aug.columns
         and len(pdata_aug.index.intersection(cell_props_raw.index)) == 0
     ):
         dnam_map = pdata_aug["SampleName_DNAm"].dropna()
         cell_props = cell_props_raw.reindex(dnam_map.values).set_axis(dnam_map.index)
         logger.info(
-            "Remapped cell_props from SentrixID -> AMC-ID: %d rows aligned.",
+            "Remapped cell_props from SentrixID -> AMC-ID (via SampleName_DNAm): %d rows aligned.",
             int(cell_props.notna().any(axis=1).sum()),
         )
     else:
@@ -134,24 +150,49 @@ def main() -> None:
     response = paired_info.set_index("Subcode")["Response"]
     logger.info("Paired subjects: %d.", len(paired_info))
 
-    # DNAm pairing (SentrixID indices on bvals.columns)
-    paired_subjects, pre_dnam, post_dnam = filter_paired_ids(pdata_aug)
+    # DNAm pairing (SentrixID indices on bvals.columns).
+    # The pData2 from load_cohort.R has column "SampleName" (not "SampleName_DNAm")
+    # for the Sentrix barcode IDs that key into bvals.columns.
+    paired_subjects, pre_dnam, post_dnam = filter_paired_ids(
+        pdata_aug, dnam_sample_col="SampleName"
+    )
 
-    # RNA pairing (AMC-ID indices on cell_props rows; rnaseq.columns are AMC-IDs)
-    paired_rna, pre_rna, post_rna = filter_paired_ids_rna(pdata_aug)
+    # RNA pairing.
+    # Step 1: get paired Subcodes via pdata_aug "Subcode" column (bare AMC-IDs).
+    #         These key into cell_props (now AMC-ID indexed after our remap).
+    # Step 2: build {Subcode}-{Visit} IDs to key into rnaseq.columns
+    #         (format: "AMC-280058-PRE-IOP", "AMC-280058-POST-IOP").
+    paired_rna, pre_rna_subcode, post_rna_subcode = filter_paired_ids(
+        pdata_aug, dnam_sample_col="Subcode"
+    )
+    pre_rna = [f"{sc}-PRE-IOP" for sc in pre_rna_subcode]
+    post_rna = [f"{sc}-POST-IOP" for sc in post_rna_subcode]
+    rna_col_set = set(rnaseq.columns)
 
     # Δ-cell-fractions (POST - PRE) keyed by paired subject ID, computed from
-    # AMC-ID indexed cell_props.
+    # AMC-ID indexed cell_props. Also require both RNA sample IDs to exist in
+    # rnaseq.columns (not all pData2-paired subjects have RNA-seq coverage).
     valid_pairs = [
-        (sc, p, q)
-        for sc, p, q in zip(paired_rna, pre_rna, post_rna, strict=False)
-        if p in cell_props.index and q in cell_props.index
+        (sc, p, q, pr, po)
+        for sc, p, q, pr, po in zip(
+            paired_rna, pre_rna_subcode, post_rna_subcode, pre_rna, post_rna, strict=False
+        )
+        if p in cell_props.index
+        and q in cell_props.index
+        and pr in rna_col_set
+        and po in rna_col_set
     ]
     if not valid_pairs:
         logger.error("No paired subjects with cell_props entries; cannot residualise.")
         sys.exit(3)
-    sc_rna, pre_rna_f, post_rna_f = (list(x) for x in zip(*valid_pairs, strict=False))
-    delta_cell_props = cell_props.loc[post_rna_f].values - cell_props.loc[pre_rna_f].values
+    # Unpack: sc=Subcode, pre/post_cp=AMC-ID for cell_props, pre/post_rna={AMC}-{Visit} for rnaseq
+    sc_rna_list = [v[0] for v in valid_pairs]
+    pre_cp_list = [v[1] for v in valid_pairs]
+    post_cp_list = [v[2] for v in valid_pairs]
+    pre_rna_ids = [v[3] for v in valid_pairs]
+    post_rna_ids = [v[4] for v in valid_pairs]
+    sc_rna = sc_rna_list
+    delta_cell_props = cell_props.loc[post_cp_list].values - cell_props.loc[pre_cp_list].values
     delta_cell_props_df = pd.DataFrame(delta_cell_props, index=sc_rna, columns=cell_props.columns)
     logger.info(
         "Δ-cell-fractions computed for %d paired subjects (RNA-aligned).",
@@ -165,8 +206,9 @@ def main() -> None:
     sc_rna_idx = {s: i for i, s in enumerate(sc_rna)}
     dnam_pre_aligned = [pre_dnam[sc_idx[s]] for s in common_subjects]
     dnam_post_aligned = [post_dnam[sc_idx[s]] for s in common_subjects]
-    rna_pre_aligned = [pre_rna_f[sc_rna_idx[s]] for s in common_subjects]
-    rna_post_aligned = [post_rna_f[sc_rna_idx[s]] for s in common_subjects]
+    # Use {Subcode}-{Visit} IDs to key into rnaseq.columns
+    rna_pre_aligned = [pre_rna_ids[sc_rna_idx[s]] for s in common_subjects]
+    rna_post_aligned = [post_rna_ids[sc_rna_idx[s]] for s in common_subjects]
     delta_cell_aligned = delta_cell_props_df.loc[common_subjects]
     logger.info(
         "Subjects with both DNAm + RNA + Δ-cell-fractions: %d.",

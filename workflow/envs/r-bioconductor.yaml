@@ -17,6 +17,7 @@ name: dnamrnaseq2026-r-bioc
 # on bioconda; we pin to 4.3 for stability.
 #
 # Dry-run solve verified: 2026-05-17, linux-64, libmamba solver, no conflicts.
+# 2026-05-21: bioconductor-limma pinned 3.56.0 -> 3.56.2 (3.56.0 not in bioconda; 3.56.2 is).
 
 channels:
   - bioconda
@@ -30,7 +31,7 @@ dependencies:
   - bioconductor-methylclock=1.6.0
   - bioconductor-methylclockdata=1.8.1
   - bioconductor-decoupler=2.6.0
-  - bioconductor-limma=3.56.0
+  - bioconductor-limma=3.56.2
   # r-dplyr replaces r-tidyverse meta-package: only dplyr is called by the
   # R scripts (run_celldmc.R). The meta-package risks a r-base>=4.4 pull
   # on future solves, conflicting with the 4.3 pin here.

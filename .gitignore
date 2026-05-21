@@ -11,6 +11,8 @@
 *.h5
 *.parquet
 analysis/*/outputs/
+# analysis/latest is a machine-local symlink to D: (see PR #8 / infra notes)
+analysis/latest
 
 # Config overrides
 config.yaml

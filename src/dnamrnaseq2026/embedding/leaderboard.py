@@ -347,7 +347,7 @@ def _format_cell(metric: str, m: dict[str, object]) -> str:
         return f"across-seed med {m['across_seed_median']:.3f} | {flag}"
     if metric == "ii_trait_state_disentanglement":
         flag = "PASS" if m.get("pass") else "FAIL"
-        return f"trait={m['n_trait']} state={m['n_state']} " f"rho={m['rho_max_cca']:.3f} | {flag}"
+        return f"trait={m['n_trait']} state={m['n_state']} rho={m['rho_max_cca']:.3f} | {flag}"
     if metric == "iii_loso_reconstruction":
         mae = m.get("loso_mae")
         return f"Delta-PCL MAE {mae:.3f}" if isinstance(mae, float) else "n/a"

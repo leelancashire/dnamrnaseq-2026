@@ -276,7 +276,7 @@ def build_rnaseq_delta_matrix(
                 post_sample,
             )
             continue
-        delta = rnaseq[post_sample].values - rnaseq[pre_sample].values
+        delta = rnaseq[post_sample].to_numpy() - rnaseq[pre_sample].to_numpy()
         delta_rows.append(pd.Series(delta, index=rnaseq.index, name=subcode))
 
     delta_df = pd.DataFrame(delta_rows)  # (n_subjects, n_genes)
@@ -455,9 +455,11 @@ def filter_paired_ids_rna(
     post_subcodes = set(post_df[subcode_col].astype(str))
     common = sorted(pre_subcodes & post_subcodes)
 
-    pre_by_subcode: dict[str, str] = {str(row[subcode_col]): idx for idx, row in pre_df.iterrows()}
+    pre_by_subcode: dict[str, str] = {
+        str(row[subcode_col]): str(idx) for idx, row in pre_df.iterrows()
+    }
     post_by_subcode: dict[str, str] = {
-        str(row[subcode_col]): idx for idx, row in post_df.iterrows()
+        str(row[subcode_col]): str(idx) for idx, row in post_df.iterrows()
     }
 
     paired_subjects: list[str] = []

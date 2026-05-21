@@ -65,6 +65,10 @@ def _encode_covariates(df: pd.DataFrame) -> np.ndarray[Any, Any]:
 
             le = LabelEncoder()
             valid = encoded[col].notna()
+            # Convert to object dtype first: pandas 3.x StringDtype rejects
+            # integer assignment via .loc, so we must widen to object before
+            # writing the label-encoded integers back.
+            encoded[col] = encoded[col].astype(object)
             encoded.loc[valid, col] = le.fit_transform(encoded.loc[valid, col].astype(str))
             encoded[col] = pd.to_numeric(encoded[col], errors="coerce")
     # numeric_only=True: skip any residual non-numeric columns during NaN imputation.
@@ -233,10 +237,11 @@ def run_de_ols(
     resp_raw = pdata[response_col].astype(str).str.strip().str.upper()
     valid_mask = resp_raw.isin(["R", "NR", "RESPONDER", "NON-RESPONDER", "0", "1"])
     pdata_sub = pdata[valid_mask]
-    resp_enc = (
+    resp_enc: np.ndarray[Any, Any] = np.asarray(
         resp_raw[valid_mask]
         .map({"R": 1, "NR": 0, "RESPONDER": 1, "NON-RESPONDER": 0, "1": 1, "0": 0})
-        .values.astype(float)
+        .to_numpy(),
+        dtype=float,
     )
 
     sample_ids = list(pdata_sub.index)
@@ -315,10 +320,11 @@ def run_de_delta(
     resp_raw = pdata_paired[response_col].astype(str).str.strip().str.upper()
     valid_mask = resp_raw.isin(["R", "NR", "RESPONDER", "NON-RESPONDER", "0", "1"])
     pdata_sub = pdata_paired[valid_mask]
-    resp_enc = (
+    resp_enc: np.ndarray[Any, Any] = np.asarray(
         resp_raw[valid_mask]
         .map({"R": 1, "NR": 0, "RESPONDER": 1, "NON-RESPONDER": 0, "1": 1, "0": 0})
-        .values.astype(float)
+        .to_numpy(),
+        dtype=float,
     )
 
     sample_ids = list(pdata_sub.index)
@@ -413,23 +419,30 @@ def rescue_check_1_3_5(
         ),
         None,
     )
+    pre_mask_arr: np.ndarray[Any, Any]
     if visit_col is None:
-        pre_mask = np.ones(len(pdata_emory), dtype=bool)
+        pre_mask_arr = np.ones(len(pdata_emory), dtype=bool)
     else:
-        pre_mask = (
+        pre_mask_arr = np.asarray(
             pdata_emory[visit_col]
             .astype(str)
             .str.upper()
             .isin(["PRE", "PRE-IOP", "BL", "BASELINE", "T0", "0"])
+            .to_numpy(),
+            dtype=bool,
         )
 
     resp_raw = pdata_emory[response_col].astype(str).str.strip().str.upper()
-    r_mask = pre_mask & resp_raw.isin(["R", "RESPONDER", "1"])
-    nr_mask = pre_mask & resp_raw.isin(["NR", "NON-RESPONDER", "0"])
+    r_mask_arr: np.ndarray[Any, Any] = pre_mask_arr & np.asarray(
+        resp_raw.isin(["R", "RESPONDER", "1"]).to_numpy(), dtype=bool
+    )
+    nr_mask_arr: np.ndarray[Any, Any] = pre_mask_arr & np.asarray(
+        resp_raw.isin(["NR", "NON-RESPONDER", "0"]).to_numpy(), dtype=bool
+    )
 
     emory_col_idx = np.arange(len(pdata_emory))
-    r_cols = emory_col_idx[r_mask.values]
-    nr_cols = emory_col_idx[nr_mask.values]
+    r_cols = emory_col_idx[r_mask_arr]
+    nr_cols = emory_col_idx[nr_mask_arr]
 
     # Gene intersection
     common_genes = list(set(gene_ids_emory) & set(gene_ids_gse.tolist()))

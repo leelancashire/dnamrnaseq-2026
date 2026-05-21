@@ -93,7 +93,7 @@ def harmonise_expression_matrices(
     )
     if n_shared < 5000:
         logger.warning(
-            "Fewer than 5000 shared genes (%d). " "Check gene ID format (symbol vs Ensembl).",
+            "Fewer than 5000 shared genes (%d). Check gene ID format (symbol vs Ensembl).",
             n_shared,
         )
 
@@ -236,10 +236,12 @@ def run_permutation_test(
     all_samps = r_samps + nr_samps
     n_nr = len(nr_samps)
 
-    trd_vec = gse_trd_centroid.values
+    trd_vec: np.ndarray[Any, Any] = np.asarray(gse_trd_centroid.to_numpy(), dtype=float)
 
     def euclidean_centroid_distance(samp_list: list[str]) -> float:
-        cent = emory_filt[samp_list].mean(axis=1).values
+        cent: np.ndarray[Any, Any] = np.asarray(
+            emory_filt[samp_list].mean(axis=1).to_numpy(), dtype=float
+        )
         return float(np.linalg.norm(cent - trd_vec))
 
     obs_d_nr = euclidean_centroid_distance(nr_samps)
