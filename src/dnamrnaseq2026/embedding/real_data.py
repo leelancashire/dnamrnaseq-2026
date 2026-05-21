@@ -315,8 +315,8 @@ def _stack_paired(
         resp = visits.loc["PRE", "Response"]
         responses.append(resp)
         responder.append(str(resp).upper() in {"R", "1", "RESPONDER"})
-        pcl_pre = visits.loc["PRE", "PCL_total"]
-        pcl_post = visits.loc["POST", "PCL_total"]
+        pcl_pre = pd.to_numeric(visits.loc["PRE", "PCL_total"], errors="coerce")
+        pcl_post = pd.to_numeric(visits.loc["POST", "PCL_total"], errors="coerce")
         delta_pcl.append(float(pcl_post) - float(pcl_pre))
 
     if dropped:
