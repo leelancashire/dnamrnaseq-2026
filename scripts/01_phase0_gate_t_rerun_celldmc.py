@@ -55,9 +55,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--n-genes", type=int, default=2000, help="Top N genes by post-correction variance."
     )
-    p.add_argument(
-        "--n-perm", type=int, default=2000, help="PERMANOVA permutations."
-    )
+    p.add_argument("--n-perm", type=int, default=2000, help="PERMANOVA permutations.")
     p.add_argument("--verbose", "-v", action="store_true")
     return p.parse_args()
 
@@ -153,12 +151,8 @@ def main() -> None:
         logger.error("No paired subjects with cell_props entries; cannot residualise.")
         sys.exit(3)
     sc_rna, pre_rna_f, post_rna_f = (list(x) for x in zip(*valid_pairs, strict=False))
-    delta_cell_props = (
-        cell_props.loc[post_rna_f].values - cell_props.loc[pre_rna_f].values
-    )
-    delta_cell_props_df = pd.DataFrame(
-        delta_cell_props, index=sc_rna, columns=cell_props.columns
-    )
+    delta_cell_props = cell_props.loc[post_rna_f].values - cell_props.loc[pre_rna_f].values
+    delta_cell_props_df = pd.DataFrame(delta_cell_props, index=sc_rna, columns=cell_props.columns)
     logger.info(
         "Δ-cell-fractions computed for %d paired subjects (RNA-aligned).",
         len(sc_rna),
@@ -334,10 +328,10 @@ def main() -> None:
                 label=f"{resp_label} centroid",
             )
     legend_elements = [
-        Line2D([0], [0], marker="o", color="w", markerfacecolor="#2196F3",
-               markersize=8, label="R"),
-        Line2D([0], [0], marker="^", color="w", markerfacecolor="#F44336",
-               markersize=8, label="NR"),
+        Line2D([0], [0], marker="o", color="w", markerfacecolor="#2196F3", markersize=8, label="R"),
+        Line2D(
+            [0], [0], marker="^", color="w", markerfacecolor="#F44336", markersize=8, label="NR"
+        ),
     ]
     ax.legend(handles=legend_elements, loc="upper right")
     ev = pca.explained_variance_ratio_
@@ -434,16 +428,12 @@ def main() -> None:
     print("=" * 60)
     print("Gate 0-T re-run: CellDMC-corrected paired-Δ PCA")
     print("=" * 60)
-    print(
-        f"Paired subjects: {result['n_subjects']} (R={result['n_r']}, NR={result['n_nr']})"
-    )
+    print(f"Paired subjects: {result['n_subjects']} (R={result['n_r']}, NR={result['n_nr']})")
     print(
         f"Features: {result['n_features']} ({corrected_dnam_top.shape[1]} CpGs + "
         f"{corrected_rna_top.shape[1]} genes)"
     )
-    print(
-        f"PERMANOVA: F={permanova['f_statistic']:.4f}, p={permanova['p_value']:.4f}"
-    )
+    print(f"PERMANOVA: F={permanova['f_statistic']:.4f}, p={permanova['p_value']:.4f}")
     print(f"Max Cohen's d (across PCs): {max(cohens_d.values()):.4f}")
     if hotelling["hotelling_p"] is not None:
         print(f"Hotelling T^2 p: {hotelling['hotelling_p']:.4f}")
