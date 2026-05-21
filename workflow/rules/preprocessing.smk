@@ -283,7 +283,15 @@ rule merge_pdata_epidish_emory:
             )
         logger.info("%d samples aligned between pdata and cell_props.", len(overlap))
 
-        pdata_aug = pdata.join(props, how="left")
+        # Rename EpiDISH columns before join to avoid collision with
+        # clinical cell-type measurements already in pData2 (e.g., CD4T, NK).
+        # EpiDISH fractions land as epidish_B, epidish_NK, epidish_CD4T, etc.
+        props_renamed = props.rename(columns=lambda c: f"epidish_{c}")
+        logger.info(
+            "EpiDISH columns renamed: %s", list(props_renamed.columns)
+        )
+
+        pdata_aug = pdata.join(props_renamed, how="left")
         pdata_aug.to_csv(output.pdata_aug, index=True)
         logger.info(
             "Written: %s (%d rows x %d cols)",
