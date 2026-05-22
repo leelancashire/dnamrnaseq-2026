@@ -84,11 +84,9 @@ def build_best_paired(
     logger.info("BEST subjects with BL+12W: %d", len(paired_subcodes))
 
     # Filter to subjects with valid R/NR status (group col: R_BL or NR_BL)
-    valid_resp = pdata.loc[
-        pdata.index.isin([pre_map[s] for s in paired_subcodes]), response_col
-    ].astype(str).str.upper()
     valid_subs = [
-        s for s in paired_subcodes
+        s
+        for s in paired_subcodes
         if str(pdata.loc[pre_map[s], response_col]).upper() in ("R_BL", "NR_BL")
     ]
     logger.info("Subjects with R/NR response: %d", len(valid_subs))
@@ -133,10 +131,15 @@ def _ols_celldmc_cpg(
         design = np.hstack([intercept, response.reshape(-1, 1), frac_c, interaction, covariates])
         valid = ~(np.isnan(m_vals) | np.isnan(design).any(axis=1))
         if valid.sum() < design.shape[1] + 2:
-            results.append({
-                "cell_type": ct, "coef": np.nan, "se": np.nan,
-                "t_stat": np.nan, "p_val": np.nan,
-            })
+            results.append(
+                {
+                    "cell_type": ct,
+                    "coef": np.nan,
+                    "se": np.nan,
+                    "t_stat": np.nan,
+                    "p_val": np.nan,
+                }
+            )
             continue
         try:
             fit = OLS(m_vals[valid], design[valid]).fit()
@@ -144,13 +147,25 @@ def _ols_celldmc_cpg(
             se = fit.bse[3]
             t = fit.tvalues[3]
             p = fit.pvalues[3]
-            results.append({"cell_type": ct, "coef": float(coef), "se": float(se),
-                            "t_stat": float(t), "p_val": float(p)})
+            results.append(
+                {
+                    "cell_type": ct,
+                    "coef": float(coef),
+                    "se": float(se),
+                    "t_stat": float(t),
+                    "p_val": float(p),
+                }
+            )
         except Exception:
-            results.append({
-                "cell_type": ct, "coef": np.nan, "se": np.nan,
-                "t_stat": np.nan, "p_val": np.nan,
-            })
+            results.append(
+                {
+                    "cell_type": ct,
+                    "coef": np.nan,
+                    "se": np.nan,
+                    "t_stat": np.nan,
+                    "p_val": np.nan,
+                }
+            )
     return results
 
 
@@ -172,6 +187,7 @@ def run_celldmc_best(
     ]
     if covariate_cols:
         from dnamrnaseq2026.preprocessing.cell_type_correction import _encode_covariates
+
         cov_matrix = _encode_covariates(pdata_paired[covariate_cols])
     else:
         cov_matrix = np.empty((len(pdata_paired), 0))
@@ -183,9 +199,7 @@ def run_celldmc_best(
     def process_chunk(idxs: range) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         for ci in idxs:
-            res = _ols_celldmc_cpg(
-                delta_m[ci], cell_fracs, response, cov_matrix, cell_type_names
-            )
+            res = _ols_celldmc_cpg(delta_m[ci], cell_fracs, response, cov_matrix, cell_type_names)
             for r in res:
                 r["cpg"] = cpg_ids[ci]
                 rows.append(r)
@@ -193,7 +207,9 @@ def run_celldmc_best(
 
     logger.info(
         "Running CellDMC on BEST: %d CpGs x %d samples x %d cell types.",
-        n_cpg, delta_m.shape[1], len(cell_type_names)
+        n_cpg,
+        delta_m.shape[1],
+        len(cell_type_names),
     )
     results_nested = Parallel(n_jobs=n_jobs)(delayed(process_chunk)(ch) for ch in chunks)
     all_rows: list[dict[str, Any]] = []
@@ -243,7 +259,7 @@ def run_replication_555(
       - pi1: Storey's replication rate on BEST p-values for the 555 hit set
       - n_sig_best_FDR05: hits also FDR<0.05 in BEST
     """
-    emory_sig = celldmc_emory[celldmc_emory["sig"] == True].copy()
+    emory_sig = celldmc_emory[celldmc_emory["sig"]].copy()
     emory_sig = emory_sig.rename(columns={"coef": "coef_emory", "fdr": "fdr_emory"})
 
     # Match on cpg + cell_type
@@ -253,7 +269,11 @@ def run_replication_555(
     )
 
     merged = emory_sig.merge(best_lookup, on=["cpg", "cell_type"], how="left")
-    logger.info("Emory hits merged with BEST: %d / %d matched.", merged["coef_best"].notna().sum(), len(merged))
+    logger.info(
+        "Emory hits merged with BEST: %d / %d matched.",
+        merged["coef_best"].notna().sum(),
+        len(merged),
+    )
 
     matched = merged[merged["coef_best"].notna()].copy()
     n_emory_hits = len(emory_sig)
@@ -348,7 +368,6 @@ def main() -> None:
     n_pairs_ok = min(len(pre_cols), len(post_cols))
     pre_cols = pre_cols[:n_pairs_ok]
     post_cols = post_cols[:n_pairs_ok]
-    subjects_ok = subjects[:n_pairs_ok]
     pdata_paired = pdata_paired.iloc[:n_pairs_ok]
 
     logger.info("Computing BEST delta-M: %d CpGs x %d pairs.", len(cpg_col), n_pairs_ok)
@@ -357,8 +376,14 @@ def main() -> None:
     delta_m = _beta_to_m(bvals_post) - _beta_to_m(bvals_pre)
 
     # Cell fractions (EpiDISH fresh columns in pdata)
-    ct_cols = ["EpiDISH_fresh_Bcell", "EpiDISH_fresh_CD4T", "EpiDISH_fresh_CD8T",
-               "EpiDISH_fresh_Mono", "EpiDISH_fresh_Neu", "EpiDISH_fresh_NK"]
+    ct_cols = [
+        "EpiDISH_fresh_Bcell",
+        "EpiDISH_fresh_CD4T",
+        "EpiDISH_fresh_CD8T",
+        "EpiDISH_fresh_Mono",
+        "EpiDISH_fresh_Neu",
+        "EpiDISH_fresh_NK",
+    ]
     ct_names_map = {
         "EpiDISH_fresh_Bcell": "B",
         "EpiDISH_fresh_CD4T": "CD4T",
@@ -375,9 +400,7 @@ def main() -> None:
     cell_fracs_arr = cell_fracs_df.values.astype(np.float64)
 
     response_arr = encode_response(pdata_paired, response_col="group")
-    logger.info(
-        "Response: %d R, %d NR.", int(response_arr.sum()), int((response_arr == 0).sum())
-    )
+    logger.info("Response: %d R, %d NR.", int(response_arr.sum()), int((response_arr == 0).sum()))
 
     # Run CellDMC on BEST delta-M
     celldmc_best = run_celldmc_best(
@@ -393,9 +416,7 @@ def main() -> None:
     celldmc_best.to_csv(OUT_DIR / "celldmc_delta_best.tsv", sep="\t", index=False)
     celldmc_best.to_csv(LATEST_DIR / "celldmc_delta_best.tsv", sep="\t", index=False)
     n_sig_best = int(celldmc_best["sig"].sum()) if not celldmc_best.empty else 0
-    logger.info(
-        "BEST CellDMC delta done: %d sig hits (FDR<0.05).", n_sig_best
-    )
+    logger.info("BEST CellDMC delta done: %d sig hits (FDR<0.05).", n_sig_best)
 
     # Load Emory 555 hits
     celldmc_emory = pd.read_csv(LATEST_DIR / "celldmc_delta_emory.tsv", sep="\t")
@@ -460,9 +481,15 @@ def _write_results_md(
         "",
         f"- Emory hits (FDR<0.05): {n_emory}",
         f"- Matched in BEST (same cpg + cell_type): {n_matched}",
-        f"- Sign concordance: {sign_conc:.3f}" if not isinstance(sign_conc, float) or not np.isnan(sign_conc) else "- Sign concordance: N/A",
-        f"- Spearman rho (Emory coef vs BEST coef): {rho:.3f} (p={rho_p:.4f})" if not isinstance(rho, float) or not np.isnan(rho) else "- Spearman rho: N/A",
-        f"- pi1 (Storey, lambda=0.5): {pi1:.3f}" if not isinstance(pi1, float) or not np.isnan(pi1) else "- pi1: N/A",
+        f"- Sign concordance: {sign_conc:.3f}"
+        if not isinstance(sign_conc, float) or not np.isnan(sign_conc)
+        else "- Sign concordance: N/A",
+        f"- Spearman rho (Emory coef vs BEST coef): {rho:.3f} (p={rho_p:.4f})"
+        if not isinstance(rho, float) or not np.isnan(rho)
+        else "- Spearman rho: N/A",
+        f"- pi1 (Storey, lambda=0.5): {pi1:.3f}"
+        if not isinstance(pi1, float) or not np.isnan(pi1)
+        else "- pi1: N/A",
         f"- BEST FDR<0.05 on the 555-hit set: {n_sig_fdr05}",
         f"- BEST p<0.05 (uncorrected) on the 555-hit set: {n_sig_uncorr}",
         "",

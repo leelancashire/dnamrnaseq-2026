@@ -17,7 +17,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -55,8 +54,14 @@ def synthetic_pdata_best(rng: np.random.Generator, n_pairs: int) -> pd.DataFrame
     groups_bl = ["R_BL"] * n_r + ["NR_BL"] * (n_pairs - n_r)
     groups_12w = ["R_12W"] * n_r + ["NR_12W"] * (n_pairs - n_r)
 
-    ct_cols = ["EpiDISH_fresh_Bcell", "EpiDISH_fresh_CD4T", "EpiDISH_fresh_CD8T",
-               "EpiDISH_fresh_Mono", "EpiDISH_fresh_Neu", "EpiDISH_fresh_NK"]
+    ct_cols = [
+        "EpiDISH_fresh_Bcell",
+        "EpiDISH_fresh_CD4T",
+        "EpiDISH_fresh_CD8T",
+        "EpiDISH_fresh_Mono",
+        "EpiDISH_fresh_Neu",
+        "EpiDISH_fresh_NK",
+    ]
     fracs_bl = rng.dirichlet(np.ones(6), size=n_pairs)
     fracs_12w = rng.dirichlet(np.ones(6), size=n_pairs)
 
@@ -117,12 +122,18 @@ def synthetic_best_celldmc(rng: np.random.Generator, n_cpgs: int) -> pd.DataFram
         for cpg in cpg_ids:
             coef = rng.normal(0.0, 0.3)
             p = rng.uniform(0.01, 0.99)
-            rows.append({
-                "cpg": cpg, "cell_type": ct,
-                "coef": coef, "se": abs(rng.normal(0.1, 0.05)),
-                "t_stat": coef / 0.1, "p_val": p,
-                "fdr": min(p * 6, 1.0), "sig": p < 0.01,
-            })
+            rows.append(
+                {
+                    "cpg": cpg,
+                    "cell_type": ct,
+                    "coef": coef,
+                    "se": abs(rng.normal(0.1, 0.05)),
+                    "t_stat": coef / 0.1,
+                    "p_val": p,
+                    "fdr": min(p * 6, 1.0),
+                    "sig": p < 0.01,
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -134,6 +145,7 @@ def synthetic_best_celldmc(rng: np.random.Generator, n_cpgs: int) -> pd.DataFram
 class TestPi1Estimate:
     def test_returns_float_in_unit_interval(self, rng: np.random.Generator) -> None:
         import importlib.util
+
         spec = importlib.util.spec_from_file_location(
             "script19_iv", "scripts/19_best_celldmc_and_replication.py"
         )
@@ -149,6 +161,7 @@ class TestPi1Estimate:
     def test_pi1_with_uniform_null(self, rng: np.random.Generator) -> None:
         """Uniform p-values -> pi1 near 0."""
         import importlib.util
+
         spec = importlib.util.spec_from_file_location(
             "script19", "scripts/19_best_celldmc_and_replication.py"
         )
@@ -162,6 +175,7 @@ class TestPi1Estimate:
     def test_pi1_with_mostly_small_p(self, rng: np.random.Generator) -> None:
         """Mostly small p-values -> pi1 close to 1."""
         import importlib.util
+
         spec = importlib.util.spec_from_file_location(
             "script19b", "scripts/19_best_celldmc_and_replication.py"
         )
@@ -169,10 +183,12 @@ class TestPi1Estimate:
         mod = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(mod)  # type: ignore[attr-defined]
-        p_vals = np.concatenate([
-            rng.uniform(0, 0.01, size=900),
-            rng.uniform(0.5, 1.0, size=100),
-        ])
+        p_vals = np.concatenate(
+            [
+                rng.uniform(0, 0.01, size=900),
+                rng.uniform(0.5, 1.0, size=100),
+            ]
+        )
         pi1 = mod.pi1_estimate(p_vals)
         assert pi1 > 0.5
 
@@ -185,6 +201,7 @@ class TestPi1Estimate:
 class TestHypothesisCoherence:
     def _load_mod(self):  # type: ignore[return]
         import importlib.util
+
         spec = importlib.util.spec_from_file_location(
             "script18_coh", "scripts/18_celldmc_enrichment_per_celltype.py"
         )
@@ -196,25 +213,29 @@ class TestHypothesisCoherence:
 
     def test_coherent_when_inflammatory_term_present(self) -> None:
         mod = self._load_mod()
-        df = pd.DataFrame({
-            "term": [
-                "Inflammatory response",
-                "NF-kB signaling",
-                "Cytokine production",
-                "Unrelated process",
-            ],
-            "adj_p": [0.001, 0.01, 0.03, 0.5],
-        })
+        df = pd.DataFrame(
+            {
+                "term": [
+                    "Inflammatory response",
+                    "NF-kB signaling",
+                    "Cytokine production",
+                    "Unrelated process",
+                ],
+                "adj_p": [0.001, 0.01, 0.03, 0.5],
+            }
+        )
         result = mod.check_hypothesis_coherence(df)
         assert result["coherent"] is True
         assert "inflammatory" in result["keyword_hits"]
 
     def test_not_coherent_when_no_relevant_terms(self) -> None:
         mod = self._load_mod()
-        df = pd.DataFrame({
-            "term": ["Ribosome biogenesis", "RNA splicing", "Protein folding"],
-            "adj_p": [0.001, 0.002, 0.01],
-        })
+        df = pd.DataFrame(
+            {
+                "term": ["Ribosome biogenesis", "RNA splicing", "Protein folding"],
+                "adj_p": [0.001, 0.002, 0.01],
+            }
+        )
         result = mod.check_hypothesis_coherence(df)
         assert result["coherent"] is False
 
@@ -232,6 +253,7 @@ class TestHypothesisCoherence:
 class TestBuildBestPaired:
     def _load_mod(self):  # type: ignore[return]
         import importlib.util
+
         spec = importlib.util.spec_from_file_location(
             "script19_bp", "scripts/19_best_celldmc_and_replication.py"
         )
@@ -258,9 +280,7 @@ class TestBuildBestPaired:
         assert len(post_ids) == len(subjects)
         assert len(pdata_paired) == len(subjects)
 
-    def test_pre_post_ids_are_different(
-        self, synthetic_pdata_best: pd.DataFrame
-    ) -> None:
+    def test_pre_post_ids_are_different(self, synthetic_pdata_best: pd.DataFrame) -> None:
         mod = self._load_mod()
         subjects, pre_ids, post_ids, _ = mod.build_best_paired(
             synthetic_pdata_best,
@@ -281,6 +301,7 @@ class TestBuildBestPaired:
 class TestRunReplication555:
     def _load_mod(self):  # type: ignore[return]
         import importlib.util
+
         spec = importlib.util.spec_from_file_location(
             "script19_rep", "scripts/19_best_celldmc_and_replication.py"
         )
@@ -298,8 +319,12 @@ class TestRunReplication555:
         mod = self._load_mod()
         _, stats = mod.run_replication_555(synthetic_emory_hits, synthetic_best_celldmc)
         required_keys = {
-            "n_emory_hits", "n_matched_in_best", "sign_concordance",
-            "spearman_rho", "pi1_best", "verdict",
+            "n_emory_hits",
+            "n_matched_in_best",
+            "sign_concordance",
+            "spearman_rho",
+            "pi1_best",
+            "verdict",
         }
         assert required_keys.issubset(set(stats.keys()))
 
@@ -330,17 +355,26 @@ class TestRunReplication555:
         cpg_ids = [f"cg{i:08d}" for i in range(n_sig)]
         cell_types = ["CD8T"] * 60 + ["B"] * 30 + ["Neutro"] * 10
         coefs = rng.normal(0.5, 0.3, size=n_sig)
-        emory = pd.DataFrame({
-            "cpg": cpg_ids, "cell_type": cell_types, "coef": coefs,
-            "fdr": [0.01] * n_sig, "sig": [True] * n_sig,
-        })
+        emory = pd.DataFrame(
+            {
+                "cpg": cpg_ids,
+                "cell_type": cell_types,
+                "coef": coefs,
+                "fdr": [0.01] * n_sig,
+                "sig": [True] * n_sig,
+            }
+        )
         # BEST: same sign and magnitude + small p
-        best = pd.DataFrame({
-            "cpg": cpg_ids, "cell_type": cell_types,
-            "coef": coefs * rng.uniform(0.8, 1.2, size=n_sig),  # ~same sign
-            "p_val": [0.01] * n_sig,
-            "fdr": [0.04] * n_sig, "sig": [True] * n_sig,
-        })
+        best = pd.DataFrame(
+            {
+                "cpg": cpg_ids,
+                "cell_type": cell_types,
+                "coef": coefs * rng.uniform(0.8, 1.2, size=n_sig),  # ~same sign
+                "p_val": [0.01] * n_sig,
+                "fdr": [0.04] * n_sig,
+                "sig": [True] * n_sig,
+            }
+        )
         _, stats = mod.run_replication_555(emory, best)
         # sign concordance should be very high with same-direction coefs
         assert stats["sign_concordance"] > 0.7
@@ -355,6 +389,7 @@ class TestRunReplication555:
 class TestCpgListToGenes:
     def _load_mod(self):  # type: ignore[return]
         import importlib.util
+
         spec = importlib.util.spec_from_file_location(
             "script18_cpg", "scripts/18_celldmc_enrichment_per_celltype.py"
         )
@@ -366,11 +401,13 @@ class TestCpgListToGenes:
 
     def test_extracts_unique_genes(self) -> None:
         mod = self._load_mod()
-        cpg_map = pd.DataFrame({
-            "cpg": ["cg00000001", "cg00000002", "cg00000003"],
-            "ucsc_gene": ["GENE_A;GENE_A;GENE_B", "GENE_C", "NA"],
-            "gencode_gene": ["GENE_A", "GENE_C", "GENE_D"],
-        })
+        cpg_map = pd.DataFrame(
+            {
+                "cpg": ["cg00000001", "cg00000002", "cg00000003"],
+                "ucsc_gene": ["GENE_A;GENE_A;GENE_B", "GENE_C", "NA"],
+                "gencode_gene": ["GENE_A", "GENE_C", "GENE_D"],
+            }
+        )
         genes = mod.cpg_list_to_genes(["cg00000001", "cg00000002", "cg00000003"], cpg_map)
         assert "GENE_A" in genes
         assert "GENE_B" in genes

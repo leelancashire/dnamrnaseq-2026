@@ -23,7 +23,6 @@ import time
 from pathlib import Path
 
 import pandas as pd
-import numpy as np
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,9 +35,7 @@ OUT_DIR = Path("analysis/2026-05-17-phase-1/1.8")
 LATEST_DIR = Path("analysis/latest")
 
 # EPIC annotation path (OneDrive mirror)
-ANN_EPIC_PATH = (
-    "/mnt/d/lee/onedrive/work/nicol healthtech/cvb/Emory-DNAm/annEPIC_filt3.RData"
-)
+ANN_EPIC_PATH = "/mnt/d/lee/onedrive/work/nicol healthtech/cvb/Emory-DNAm/annEPIC_filt3.RData"
 
 # Enrichr gene-set libraries to query
 ENRICHR_LIBRARIES = [
@@ -52,8 +49,16 @@ ENRICHR_LIBRARIES = [
 HYPOTHESIS_KEYWORDS = {
     "monocyte": ["monocyte", "mononuclear", "macrophage", "myeloid"],
     "inflammatory": [
-        "inflammatory", "inflammation", "cytokine", "interleukin", "nfkb",
-        "nf-kb", "tnf", "interferon", "immune", "innate immunity",
+        "inflammatory",
+        "inflammation",
+        "cytokine",
+        "interleukin",
+        "nfkb",
+        "nf-kb",
+        "tnf",
+        "interferon",
+        "immune",
+        "innate immunity",
     ],
     "wnt": ["wnt", "wingless", "frizzled", "beta-catenin"],
     "cd8t": ["t cell", "cytotoxic", "adaptive immunity", "lymphocyte", "cd8"],
@@ -85,6 +90,7 @@ cat("nrow:", nrow(df), "\\n")
         "Rscript",
     ]:
         import shutil
+
         if shutil.which(candidate) or Path(candidate).exists():
             r_bin = candidate
             break
@@ -150,13 +156,13 @@ def run_enrichr(gene_list: list[str], library: str, max_retries: int = 3) -> pd.
             )
             if resp.status_code != 200:
                 logger.warning("Enrichr addList HTTP %s (attempt %d)", resp.status_code, attempt)
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
                 continue
             user_list_id = resp.json().get("userListId")
             break
         except Exception as exc:
             logger.warning("Enrichr addList error (attempt %d): %s", attempt, exc)
-            time.sleep(2 ** attempt)
+            time.sleep(2**attempt)
     else:
         return pd.DataFrame()
 
@@ -170,13 +176,13 @@ def run_enrichr(gene_list: list[str], library: str, max_retries: int = 3) -> pd.
             )
             if resp.status_code != 200:
                 logger.warning("Enrichr enrich HTTP %s (attempt %d)", resp.status_code, attempt)
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
                 continue
             data = resp.json().get(library, [])
             break
         except Exception as exc:
             logger.warning("Enrichr enrich error (attempt %d): %s", attempt, exc)
-            time.sleep(2 ** attempt)
+            time.sleep(2**attempt)
     else:
         return pd.DataFrame()
 
@@ -187,15 +193,17 @@ def run_enrichr(gene_list: list[str], library: str, max_retries: int = 3) -> pd.
     rows = []
     for entry in data:
         if len(entry) >= 7:
-            rows.append({
-                "rank": entry[0],
-                "term": entry[1],
-                "p_value": entry[2],
-                "z_score": entry[3],
-                "combined_score": entry[4],
-                "genes": ";".join(entry[5]) if isinstance(entry[5], list) else str(entry[5]),
-                "adj_p": entry[6],
-            })
+            rows.append(
+                {
+                    "rank": entry[0],
+                    "term": entry[1],
+                    "p_value": entry[2],
+                    "z_score": entry[3],
+                    "combined_score": entry[4],
+                    "genes": ";".join(entry[5]) if isinstance(entry[5], list) else str(entry[5]),
+                    "adj_p": entry[6],
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -220,11 +228,7 @@ def check_hypothesis_coherence(enrichment_df: pd.DataFrame) -> dict[str, object]
         k in keyword_hits for k in ["monocyte", "inflammatory", "wnt"]
     )
 
-    top_sig = (
-        sig.sort_values("adj_p").head(10)["term"].tolist()
-        if not sig.empty
-        else []
-    )
+    top_sig = sig.sort_values("adj_p").head(10)["term"].tolist() if not sig.empty else []
 
     return {
         "coherent": coherent,
@@ -241,7 +245,7 @@ def main() -> None:
     # Load CellDMC delta hits
     celldmc_path = LATEST_DIR / "celldmc_delta_emory.tsv"
     celldmc_delta = pd.read_csv(celldmc_path, sep="\t")
-    sig = celldmc_delta[celldmc_delta["sig"] == True].copy()
+    sig = celldmc_delta[celldmc_delta["sig"]].copy()
     logger.info("CellDMC delta sig hits: %d across cell types.", len(sig))
 
     cell_type_counts = sig["cell_type"].value_counts()
@@ -262,9 +266,7 @@ def main() -> None:
     for ct in cell_types_to_test:
         ct_cpgs = sig[sig["cell_type"] == ct]["cpg"].tolist()
         ct_genes = cpg_list_to_genes(ct_cpgs, cpg_map)
-        logger.info(
-            "Cell type %s: %d CpGs -> %d unique genes.", ct, len(ct_cpgs), len(ct_genes)
-        )
+        logger.info("Cell type %s: %d CpGs -> %d unique genes.", ct, len(ct_cpgs), len(ct_genes))
 
         if len(ct_genes) < 5:
             logger.warning("Too few genes (%d) for %s; skipping enrichment.", len(ct_genes), ct)
