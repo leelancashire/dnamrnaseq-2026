@@ -103,6 +103,30 @@ TIER2_PROVENANCE = {
     ),
 }
 
+# Provenance marker for Tier 1 matrices. Tier 1 feature selection is a fixed
+# biological prior (CellDMC FDR<0.10 CpGs; PROGENy 14-pathway panel; top-150
+# TF activity scores by variance), not a cohort-data-driven ranking. The
+# feature set is pre-specified and constant across all CV folds; no held-out
+# sample influences which features exist. Tier 1 is therefore legitimately
+# CV-loop-safe and may be admitted to the Phase 2 modelling path by
+# load_feature_matrix_for_cv (design doc Section 2.0; confirmed by Helen Zhao
+# in PR #12 review).
+TIER1_PROVENANCE = {
+    "selection_stage": "TIER1_FIXED_PRIOR",
+    "cv_loop_safe": "True",
+    "rationale": (
+        "Tier 1 features are a fixed biological prior, not a cohort-data-driven "
+        "selection. DNAm: CellDMC FDR<0.10 CpGs from delta-contrast interaction "
+        "test (any cell type) -- a pre-specified biological criterion, not a "
+        "variance ranking fitted on the full cohort. RNA: PROGENy 14-pathway "
+        "activity panel + top-150 TF activities (CollecTRI regulon) -- curated "
+        "biological feature sets, not HVG selection. Because no held-out test "
+        "sample influences which features are included, Tier 1 matrices carry no "
+        "train/test leakage and are safe to load directly into the CV loop. "
+        "Design doc v1.1 Section 2.0; PR #12 review (Helen Zhao)."
+    ),
+}
+
 
 def _stamp_tier2_provenance(path: Path) -> None:
     """Write the EDA-only / cv_loop_safe=False provenance marker beside a matrix.
@@ -117,6 +141,27 @@ def _stamp_tier2_provenance(path: Path) -> None:
     sidecar = path.with_suffix(path.suffix + ".provenance.json")
     sidecar.write_text(json.dumps(TIER2_PROVENANCE, indent=2) + "\n")
     logger.info("Written provenance marker: %s (cv_loop_safe=False)", sidecar.name)
+
+
+def _stamp_tier1_provenance(path: Path) -> None:
+    """Write the cv_loop_safe=True provenance marker beside a Tier 1 matrix.
+
+    Tier 1 feature selection is a fixed biological prior (CellDMC FDR<0.10
+    CpGs; PROGENy 14-pathway panel; top-150 TF activity scores). It is not a
+    cohort-data-driven ranking, so no held-out sample influences which features
+    are included. The matrix is safe to admit to the CV loop via
+    load_feature_matrix_for_cv without further per-fold re-selection.
+
+    This sidecar is required by the fail-closed loader
+    (feature_selection.assert_cv_loop_safe): a missing sidecar raises
+    Phase1ArtefactError. Both Tier 1 matrices must be stamped before any
+    downstream Phase 2 modelling path can consume them.
+    """
+    import json
+
+    sidecar = path.with_suffix(path.suffix + ".provenance.json")
+    sidecar.write_text(json.dumps(TIER1_PROVENANCE, indent=2) + "\n")
+    logger.info("Written provenance marker: %s (cv_loop_safe=True)", sidecar.name)
 
 
 # Top TF activities by variance (design doc Section 2.1, ~120-220 total features)
@@ -392,8 +437,13 @@ def main() -> None:
     # --- Tier 1 DNAm ---
     m_tier1, sig_table, n_tier1_cpgs = build_tier1_dnam(m_df, LATEST_DIR)
 
-    # Write Tier 1 DNAm matrix
-    m_tier1.to_parquet(out_dir / "feature_matrix_tier1_dnam.parquet")
+    # Write Tier 1 DNAm matrix + provenance sidecar.
+    # cv_loop_safe=True: Tier 1 is a fixed biological prior (CellDMC FDR<0.10),
+    # not a cohort-data-driven selection, so it carries no train/test leakage.
+    # The sidecar is required by the fail-closed loader (assert_cv_loop_safe).
+    tier1_dnam_path = out_dir / "feature_matrix_tier1_dnam.parquet"
+    m_tier1.to_parquet(tier1_dnam_path)
+    _stamp_tier1_provenance(tier1_dnam_path)
     logger.info("Written: feature_matrix_tier1_dnam.parquet %s", m_tier1.shape)
 
     # Write sig table (subset of celldmc for Tier 1 CpGs)
@@ -406,8 +456,12 @@ def main() -> None:
     logger.info("Written: tier1_cpg_list.txt (%d CpGs)", len(tier1_cpg_list))
 
     # --- Tier 1 RNA (PROGENy + TF activity) ---
+    # cv_loop_safe=True: PROGENy 14-pathway panel + top-150 TF activities are
+    # curated biological feature sets, not HVG selection fitted on the cohort.
+    tier1_rna_path = out_dir / "feature_matrix_tier1_rna.parquet"
     rna_tier1 = build_tier1_rna(pdata, LATEST_DIR)
-    rna_tier1.to_parquet(out_dir / "feature_matrix_tier1_rna.parquet")
+    rna_tier1.to_parquet(tier1_rna_path)
+    _stamp_tier1_provenance(tier1_rna_path)
     logger.info("Written: feature_matrix_tier1_rna.parquet %s", rna_tier1.shape)
 
     # --- Canonical CellDMC parquet (alias for feature_selection.py) ---
