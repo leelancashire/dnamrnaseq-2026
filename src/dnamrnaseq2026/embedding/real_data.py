@@ -203,6 +203,32 @@ def _sample_key(subcode: str, visit: str) -> str:
     return f"{subcode}-{raw_visit}"
 
 
+def _assert_block_finite(x: np.ndarray, feature_names: list[str], visit: str, what: str) -> None:
+    """Raise Phase1ArtefactError if ``x`` carries any non-finite value.
+
+    ``np.isfinite(...).all()`` catches *partial* NaN contamination: a single
+    NaN cell anywhere in the assembled feature block fails the check, where the
+    upstream ``_read_activity`` all-NaN guard (``.any()``) would let it through.
+    The in-progress Phase 1 step 1.4/1.5 re-run is exactly the regime where a
+    partially populated activity parquet (some TFs converged, some did not) is
+    plausible, so this guard must be value-level, not artefact-level.
+    """
+    finite = np.isfinite(x)
+    if finite.all():
+        return
+    bad_rows, bad_cols = np.where(~finite)
+    n_bad = int(bad_rows.size)
+    first_col = int(bad_cols[0])
+    feat = feature_names[first_col] if first_col < len(feature_names) else f"col_{first_col}"
+    raise Phase1ArtefactError(
+        f"{what} ({visit} block) carries {n_bad} non-finite value(s); first at "
+        f"sample row {int(bad_rows[0])}, feature '{feat}'. A partially populated "
+        "activity artefact (pending the Phase 1 step 1.4/1.5 re-run) reaches here "
+        "with NaNs that the all-NaN stub guard does not catch; NaNs must not "
+        "flow into the encoders."
+    )
+
+
 def build_rna_activity_matrix(
     pdata: pd.DataFrame,
     paths: Phase1Paths | None = None,
@@ -329,6 +355,28 @@ def _stack_paired(
     x_pre = np.asarray(pre_rows, dtype=np.float64)
     x_post = np.asarray(post_rows, dtype=np.float64)
     feature_names = dnam_cols + rna_cols + clin_cols
+
+    # Fail loud on partial-NaN contamination before the ArmInputs is returned.
+    # The upstream all-NaN guard only rejects an entirely non-finite artefact;
+    # a parquet with one finite cell passes it and seeds NaNs into x_pre/x_post.
+    _assert_block_finite(x_pre, feature_names, "PRE", "Assembled paired feature block")
+    _assert_block_finite(x_post, feature_names, "POST", "Assembled paired feature block")
+
+    # Responder-mask sanity: a silently inverted or degenerate Response coding
+    # (e.g. Y/N or 0/1-with-responder-0) collapses the mask to all-True or
+    # all-False and flips the Arm A/C contrastive labels. Assert a plausible
+    # fraction rather than trusting the string coding blindly.
+    responder_arr = np.asarray(responder, dtype=bool)
+    responder_frac = float(responder_arr.mean())
+    if not 0.05 <= responder_frac <= 0.95:
+        raise Phase1ArtefactError(
+            f"Responder fraction {responder_frac:.3f} is degenerate "
+            f"({int(responder_arr.sum())} of {len(responder_arr)} subjects flagged "
+            "responders). The Emory 'Response' column coding likely does not match "
+            "the expected {R, 1, RESPONDER} token set; the responder mask, and the "
+            "Arm A/C contrastive labels derived from it, would be wrong."
+        )
+
     paired = PairedDataset(
         x_pre=x_pre,
         x_post=x_post,
@@ -346,7 +394,7 @@ def _stack_paired(
         rna_post=x_post[:, n_dnam : n_dnam + n_rna],
         clin_pre=x_pre[:, n_dnam + n_rna :],
         clin_post=x_post[:, n_dnam + n_rna :],
-        responder_mask=np.asarray(responder, dtype=bool),
+        responder_mask=responder_arr,
     )
 
 
@@ -402,6 +450,27 @@ def build_arm_inputs(paths: Phase1Paths | None = None) -> ArmInputs:
         clin_vec = cov.loc[key, clin_cols].to_numpy(dtype=np.float64)
         rna_vec = rna.loc[key].to_numpy(dtype=np.float64)
         feature_lookup[str(key)] = np.concatenate([dnam_vec, rna_vec, clin_vec])
+
+    # Join-key sanity. The {Subcode}-{Visit} key is built from hard-coded
+    # PRE-IOP / POST-IOP raw visit strings; if the activity parquet ever keys on
+    # a different raw form (PRE / Pre-IOP / whitespace) every membership test
+    # fails silently and the loader assembles 0 subjects. Log the match rate and
+    # fail loud with a key-format-specific message rather than a generic error.
+    n_matched = len(feature_lookup)
+    n_rna_keys = int(len(rna.index))
+    logger.info(
+        "build_arm_inputs: %d of %d RNA activity keys matched a covariate row",
+        n_matched,
+        n_rna_keys,
+    )
+    if n_matched == 0:
+        raise Phase1ArtefactError(
+            f"None of the {n_rna_keys} RNA activity keys matched a pData covariate "
+            f"row. Sample keys are built as '{{Subcode}}-PRE-IOP'/'-POST-IOP'; the "
+            f"activity index likely uses a different raw visit form. "
+            f"Example RNA key: {rna.index[0]!r}; example covariate key: "
+            f"{cov.index[0]!r}."
+        )
 
     inputs = _stack_paired(
         pdata,

@@ -18,11 +18,14 @@ synthetic fixtures before Phase 1 lands.
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
+
+from dnamrnaseq2026.embedding.real_data import Phase1ArtefactError
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +252,111 @@ def resolve_feature_tier(
             "CellDMC artefact absent/empty (pending Phase 1 re-run)"
         ),
     )
+
+
+def _provenance_sidecar(matrix_path: Path) -> Path:
+    """Return the ``.provenance.json`` sidecar path for a feature-matrix parquet.
+
+    Matches the naming convention written by ``scripts/22_phase2_build_feature_matrices.py``
+    (``_stamp_tier2_provenance``): the sidecar is the matrix filename with
+    ``.provenance.json`` appended, e.g.
+    ``feature_matrix_tier2_dnam.parquet.provenance.json``.
+    """
+    return matrix_path.with_suffix(matrix_path.suffix + ".provenance.json")
+
+
+def assert_cv_loop_safe(matrix_path: Path) -> dict[str, object]:
+    """Refuse a feature matrix that is not CV-loop-safe (design Section 4.2).
+
+    This is the *consumer-side* enforcement of the ``cv_loop_safe`` provenance
+    stamp written beside Tier 2 candidate matrices by
+    ``scripts/22_phase2_build_feature_matrices.py``. The writer marks
+    biology-filtered Tier 2 candidate matrices ``cv_loop_safe = False`` because
+    the data-driven variance / HVG top-N ranking has NOT yet been applied; that
+    selection must be fit per training fold by
+    :class:`~dnamrnaseq2026.embedding.data_harness.PairedPreprocessor`. A
+    cohort-wide-ranked candidate matrix fed straight into a CV / training path
+    leaks held-out test rows into feature selection.
+
+    Call this at the point a feature matrix is admitted to a modelling path
+    (see :func:`load_feature_matrix_for_cv`). It raises
+    :class:`~dnamrnaseq2026.embedding.real_data.Phase1ArtefactError` when the
+    matrix is not CV-loop-safe.
+
+    Fail-closed policy
+    ------------------
+    A *missing* sidecar raises. A matrix with no provenance has unknown
+    selection lineage; admitting it would silently re-open exactly the leak the
+    stamp was introduced to prevent. The only matrices that legitimately enter a
+    CV path are (a) per-fold ``PairedPreprocessor`` output (in-memory, never
+    routed through this loader) or (b) a matrix explicitly stamped
+    ``cv_loop_safe = True``. Anything else is refused.
+
+    Parameters
+    ----------
+    matrix_path:
+        Path to the feature-matrix parquet about to be loaded for modelling.
+
+    Returns
+    -------
+    The parsed provenance dict, on success.
+    """
+    sidecar = _provenance_sidecar(matrix_path)
+    if not sidecar.exists() or sidecar.stat().st_size == 0:
+        raise Phase1ArtefactError(
+            f"Feature matrix {matrix_path.name} has no provenance sidecar "
+            f"({sidecar.name}); refusing to admit it to a CV / training path. "
+            "Selection lineage is unknown, so cohort-wide-ranked leakage cannot "
+            "be ruled out (fail-closed; design doc Section 4.2). Re-run "
+            "scripts/22_phase2_build_feature_matrices.py to stamp provenance, or "
+            "feed per-fold PairedPreprocessor output instead."
+        )
+    provenance: dict[str, object] = json.loads(sidecar.read_text())
+
+    # cv_loop_safe is written as a JSON string ("False"/"True") by the stamping
+    # script; accept a real bool too in case the writer is later tightened.
+    raw = provenance.get("cv_loop_safe")
+    safe = raw is True or (isinstance(raw, str) and raw.strip().lower() == "true")
+    if not safe:
+        stage = provenance.get("selection_stage", "<unset>")
+        raise Phase1ArtefactError(
+            f"Feature matrix {matrix_path.name} is stamped cv_loop_safe={raw!r} "
+            f"(selection_stage={stage!r}); refusing to admit it to a CV / "
+            "training path. This is a biology-filtered Tier 2 *candidate* matrix: "
+            "the variance / HVG top-N ranking has not been applied and MUST be "
+            "fit per training fold by PairedPreprocessor (design doc Section "
+            "4.2). Feeding a cohort-wide candidate matrix into the CV loop leaks "
+            "held-out test rows into feature selection."
+        )
+    logger.info("Provenance check passed: %s is cv_loop_safe", matrix_path.name)
+    return provenance
+
+
+def load_feature_matrix_for_cv(matrix_path: Path) -> pd.DataFrame:
+    """Load a feature matrix for a CV / training path, enforcing CV-loop safety.
+
+    This is the *single canonical entry point* for bringing a pre-baked feature
+    matrix (Tier 1 or Tier 2) off disk into a modelling path. It runs
+    :func:`assert_cv_loop_safe` before reading the parquet, so a leaky
+    cohort-wide-ranked Tier 2 candidate matrix fails loud here instead of
+    silently training an embedding on a leaked feature set.
+
+    Per-fold ``PairedPreprocessor`` output stays in memory and is never routed
+    through this loader; this guard governs only the on-disk-matrix route, which
+    is the only route by which an unsafe matrix could reach training.
+
+    Raises
+    ------
+    Phase1ArtefactError
+        If the matrix is missing, has no provenance sidecar, or is stamped
+        ``cv_loop_safe = False``.
+    """
+    if not matrix_path.exists() or matrix_path.stat().st_size == 0:
+        raise Phase1ArtefactError(f"Feature matrix missing or a zero-byte stub at {matrix_path}")
+    assert_cv_loop_safe(matrix_path)
+    df = pd.read_parquet(matrix_path)
+    logger.info("Loaded CV-safe feature matrix %s: %s", matrix_path.name, df.shape)
+    return df
 
 
 def assemble_rna_activity_features(

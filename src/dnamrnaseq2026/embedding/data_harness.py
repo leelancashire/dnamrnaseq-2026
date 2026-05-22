@@ -240,6 +240,105 @@ def subject_level_folds(
     return folds
 
 
+@dataclass
+class PairedPreprocessor:
+    """Fold-internal Tier 2 feature selection + normalisation (design Section 4.2).
+
+    Design Section 4.2 (hard rule): *all* preprocessing, including Tier 2
+    variance filtering and HVG selection, is fit INSIDE the outer CV loop, on
+    the training fold only, then applied to the held-out fold. Ranking variance
+    or HVGs on the full cohort lets held-out test rows influence which features
+    exist; that is a train/test leak that invalidates an embedding benchmark.
+
+    This preprocessor is the fold-aware home of that selection. The intended
+    per-fold usage is::
+
+        prep = PairedPreprocessor(tier2_dnam_top=5000, tier2_rna_top=2000)
+        prep.fit(train_dnam, train_rna)         # ranking on training rows only
+        dnam_tr, rna_tr = prep.transform(train_dnam, train_rna)
+        dnam_te, rna_te = prep.transform(test_dnam, test_rna)  # held-out fold
+
+    The selected feature lists and the per-feature mean/std come from the
+    training fold exclusively; ``transform`` only subsets and standardises with
+    those frozen statistics. ``fit`` must never see test-fold rows.
+
+    Tier 1 (CellDMC FDR<0.10) is a fixed biological prior, not a data-driven
+    selection, and is resolved separately via ``feature_selection.resolve_feature_tier``;
+    it is correctly pre-computable cohort-wide and is NOT handled here.
+
+    Inputs are (n_samples, n_features) sample-major frames -- the orientation
+    the loaders assemble -- so variance/HVG ranking is over ``axis=0``.
+    """
+
+    tier2_dnam_top: int = 5000
+    tier2_rna_top: int = 2000
+    standardise: bool = True
+    _dnam_features: list[str] = field(default_factory=list)
+    _rna_features: list[str] = field(default_factory=list)
+    _dnam_mean: pd.Series | None = field(default=None, repr=False)
+    _dnam_std: pd.Series | None = field(default=None, repr=False)
+    _rna_mean: pd.Series | None = field(default=None, repr=False)
+    _rna_std: pd.Series | None = field(default=None, repr=False)
+    _fitted: bool = False
+
+    def fit(self, dnam_train: pd.DataFrame, rna_train: pd.DataFrame) -> PairedPreprocessor:
+        """Rank Tier 2 features on the TRAINING FOLD ONLY and freeze statistics.
+
+        ``dnam_train`` / ``rna_train`` are (n_train_samples, n_features) frames
+        restricted to the current outer-fold training subjects. Never pass
+        held-out rows here: that is the leak Section 4.2 forbids.
+        """
+        dnam_var = dnam_train.var(axis=0).sort_values(ascending=False)
+        self._dnam_features = [str(c) for c in dnam_var.head(self.tier2_dnam_top).index]
+        rna_var = rna_train.var(axis=0).sort_values(ascending=False)
+        self._rna_features = [str(c) for c in rna_var.head(self.tier2_rna_top).index]
+
+        if self.standardise:
+            dnam_sel = dnam_train[self._dnam_features]
+            rna_sel = rna_train[self._rna_features]
+            self._dnam_mean = dnam_sel.mean(axis=0)
+            self._dnam_std = dnam_sel.std(axis=0).replace(0.0, 1.0)
+            self._rna_mean = rna_sel.mean(axis=0)
+            self._rna_std = rna_sel.std(axis=0).replace(0.0, 1.0)
+
+        self._fitted = True
+        logger.info(
+            "PairedPreprocessor.fit: Tier 2 selection on %d training samples "
+            "(%d DNAm, %d RNA features kept)",
+            len(dnam_train),
+            len(self._dnam_features),
+            len(self._rna_features),
+        )
+        return self
+
+    def transform(self, dnam: pd.DataFrame, rna: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """Subset + standardise with the frozen training-fold selection.
+
+        Applied identically to the training fold and the held-out fold; the
+        held-out fold never influences which features are kept or the mean/std.
+        """
+        if not self._fitted:
+            raise RuntimeError("PairedPreprocessor.transform called before fit")
+        dnam_out = dnam.reindex(columns=self._dnam_features)
+        rna_out = rna.reindex(columns=self._rna_features)
+        if self.standardise:
+            assert self._dnam_mean is not None and self._dnam_std is not None
+            assert self._rna_mean is not None and self._rna_std is not None
+            dnam_out = (dnam_out - self._dnam_mean) / self._dnam_std
+            rna_out = (rna_out - self._rna_mean) / self._rna_std
+        return dnam_out, rna_out
+
+    @property
+    def dnam_features(self) -> list[str]:
+        """Tier 2 DNAm features selected on the training fold."""
+        return list(self._dnam_features)
+
+    @property
+    def rna_features(self) -> list[str]:
+        """Tier 2 RNA HVGs selected on the training fold."""
+        return list(self._rna_features)
+
+
 def inner_calibration_split(
     train_subject_idx: np.ndarray,
     calib_fraction: float = 0.2,

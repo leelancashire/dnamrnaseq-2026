@@ -15,20 +15,26 @@ Public surface:
 
 from dnamrnaseq2026.embedding.data_harness import (
     PairedDataset,
+    PairedPreprocessor,
     build_paired_dataset,
     inner_calibration_split,
     subject_level_folds,
 )
 from dnamrnaseq2026.embedding.feature_selection import (
     FeatureTier,
+    assert_cv_loop_safe,
+    load_feature_matrix_for_cv,
     resolve_feature_tier,
 )
 
 __all__ = [
     "PairedDataset",
+    "PairedPreprocessor",
     "build_paired_dataset",
     "subject_level_folds",
     "inner_calibration_split",
     "FeatureTier",
     "resolve_feature_tier",
+    "assert_cv_loop_safe",
+    "load_feature_matrix_for_cv",
 ]
