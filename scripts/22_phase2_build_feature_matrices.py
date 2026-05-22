@@ -33,10 +33,33 @@ Tier 1 (CellDMC FDR<0.10) is a fixed biological prior, not a data-driven
 selection; it is correctly pre-computable cohort-wide and is reported in the
 manuscript as a fixed cohort-level prior, NOT a learned selection.
 
+LEAKAGE CONTRACT -- TIER 1 RNA (corrected 2026-05-22, Helen Zhao)
+-----------------------------------------------------------------
+Tier 1 DNAm (CellDMC FDR<0.10) is a genuinely fixed biological prior: a
+pre-specified significance threshold, no cohort-relative ranking. It stays
+``cv_loop_safe = True``.
+
+Tier 1 RNA is NOT a pure fixed prior. The PROGENy 14-pathway panel IS a fixed
+curated set, but the TF panel was assembled by ``tf_act.var(axis=0)`` -- a
+variance rank computed across ALL cohort samples. A cohort-wide variance rank
+lets held-out test rows decide which TFs enter the matrix; that is the same
+train/test leak class caught for Tier 2. The design doc Section 2.1 always
+specified the TF set as "top ~100-200 TF activity scores by variance", i.e.
+a data-driven rank, never a curated biological list -- so the leakage-correct
+AND design-faithful fix is to move the TF variance rank per training fold,
+not to invent a fixed list. Consequently this script no longer bakes a
+cohort-variance-ranked 150-TF Tier 1 RNA matrix. It writes the FULL TF
+activity matrix (PROGENy fixed + all TFs) as a candidate set stamped
+``cv_loop_safe = False``; the top-N TF variance selection is fit per fold by
+``PairedPreprocessor`` (or, for the unsupervised Arm B run, per MOFA+ fit on
+the training rows). PROGENy stays fixed and leakage-free regardless.
+
 Outputs written to analysis/latest/:
   feature_matrix_tier1_dnam.parquet   -- (n_samples, n_tier1_cpgs) M-values
-  feature_matrix_tier1_rna.parquet    -- (n_samples, n_activity_features)
-                                         PROGENy + top-150 TF activities
+                                         cv_loop_safe=True (fixed CellDMC prior)
+  feature_matrix_tier1_rna.parquet    -- (n_samples, 14 PROGENy + all TFs)
+                                         cv_loop_safe=False -- TF variance rank
+                                         is fit per fold; PROGENy fixed
   tier1_cpg_list.txt                  -- one CpG per line
   tier1_celltype_table.tsv            -- sig rows from celldmc_delta_emory.tsv
                                          (cpg, cell_type, coef, fdr)
@@ -103,6 +126,56 @@ TIER2_PROVENANCE = {
     ),
 }
 
+# Provenance marker for the Tier 1 DNAm matrix. The DNAm Tier 1 feature set is
+# a fixed biological prior: CellDMC FDR<0.10 CpGs from the delta-contrast
+# interaction test (any cell type). FDR<0.10 is a pre-specified significance
+# threshold, not a cohort-relative variance ranking; no held-out sample
+# influences which CpGs are included. Tier 1 DNAm is therefore legitimately
+# CV-loop-safe and may be admitted to the Phase 2 modelling path directly.
+# Design doc v1.1 Section 2.0; PR #12 review (Helen Zhao).
+TIER1_DNAM_PROVENANCE = {
+    "selection_stage": "TIER1_FIXED_PRIOR",
+    "cv_loop_safe": "True",
+    "rationale": (
+        "Tier 1 DNAm is a fixed biological prior, not a cohort-data-driven "
+        "selection. CellDMC FDR<0.10 CpGs from the delta-contrast interaction "
+        "test (any cell type) -- a pre-specified significance threshold, not a "
+        "variance ranking fitted on the full cohort. Because no held-out test "
+        "sample influences which CpGs are included, the Tier 1 DNAm matrix "
+        "carries no train/test leakage and is safe to load directly into the "
+        "CV loop. Design doc v1.1 Section 2.0; PR #12 review (Helen Zhao)."
+    ),
+}
+
+# Provenance marker for the Tier 1 RNA matrix. CORRECTED 2026-05-22 (Helen
+# Zhao): Tier 1 RNA is NOT a pure fixed prior and is stamped
+# cv_loop_safe=False. The PROGENy 14-pathway panel IS fixed and curated, but
+# the TF panel was previously assembled by a cohort-wide variance rank
+# (tf_act.var(axis=0) over all 344 samples). A cohort-wide variance rank lets
+# held-out rows decide which TFs enter the matrix -- the same train/test leak
+# class caught for Tier 2. This script no longer bakes a 150-TF cohort-ranked
+# panel; it writes PROGENy (fixed) + ALL TF activities as a candidate matrix,
+# and the top-N TF variance rank is fit per training fold by
+# PairedPreprocessor (or per MOFA+ fit on training rows for the unsupervised
+# Arm B). Design doc Section 2.1 always specified the TF set as a variance
+# rank, so per-fold selection is both leakage-correct and design-faithful.
+TIER1_RNA_PROVENANCE = {
+    "selection_stage": "TIER1_RNA_CANDIDATE",
+    "cv_loop_safe": "False",
+    "note": (
+        "Tier 1 RNA candidate set: PROGENy 14-pathway activities (fixed, "
+        "leakage-free curated panel) concatenated with the FULL decoupleR/"
+        "CollecTRI TF activity matrix (all TFs, NOT a baked top-N list). The "
+        "top-N TF variance ranking is a data-driven selection and is fit per "
+        "training fold by PairedPreprocessor (design doc Section 4.2); for the "
+        "unsupervised Arm B MOFA+ run the TF rank is computed on the training "
+        "rows of each fit. Do NOT treat this matrix as a finished leakage-free "
+        "feature set. Corrected 2026-05-22 (Helen Zhao): the previous build "
+        "baked a cohort-variance-ranked 150-TF panel, which leaked held-out "
+        "rows into feature selection."
+    ),
+}
+
 
 def _stamp_tier2_provenance(path: Path) -> None:
     """Write the EDA-only / cv_loop_safe=False provenance marker beside a matrix.
@@ -119,8 +192,29 @@ def _stamp_tier2_provenance(path: Path) -> None:
     logger.info("Written provenance marker: %s (cv_loop_safe=False)", sidecar.name)
 
 
-# Top TF activities by variance (design doc Section 2.1, ~120-220 total features)
-TOP_TF_BY_VARIANCE = 150
+def _stamp_tier1_provenance(path: Path, provenance: dict[str, str]) -> None:
+    """Write a Tier 1 provenance marker sidecar beside a Tier 1 matrix.
+
+    Tier 1 DNAm (``TIER1_DNAM_PROVENANCE``) is a fixed biological prior
+    (CellDMC FDR<0.10) and is stamped ``cv_loop_safe=True``. Tier 1 RNA
+    (``TIER1_RNA_PROVENANCE``) is a candidate set: PROGENy is fixed but the TF
+    variance rank must be fit per fold, so it is stamped ``cv_loop_safe=False``
+    and the fail-closed loader will refuse it on the CV path.
+
+    The sidecar is read by the fail-closed loader
+    (feature_selection.assert_cv_loop_safe): a missing sidecar raises
+    Phase1ArtefactError. Both Tier 1 matrices must be stamped before any
+    downstream Phase 2 path can consume them.
+    """
+    import json
+
+    sidecar = path.with_suffix(path.suffix + ".provenance.json")
+    sidecar.write_text(json.dumps(provenance, indent=2) + "\n")
+    logger.info(
+        "Written provenance marker: %s (cv_loop_safe=%s)",
+        sidecar.name,
+        provenance["cv_loop_safe"],
+    )
 
 
 def _beta_to_m(bvals: np.ndarray) -> np.ndarray:
@@ -207,10 +301,19 @@ def build_tier1_rna(
     pdata: pd.DataFrame,
     latest_dir: Path,
 ) -> pd.DataFrame:
-    """Build Tier 1 RNA-side feature matrix: PROGENy + top-TF activities.
+    """Build the Tier 1 RNA-side CANDIDATE matrix: PROGENy + ALL TF activities.
 
-    Returns (n_samples, n_activity_features) DataFrame indexed by SentrixID,
+    Returns (n_samples, 14 PROGENy + n_all_tfs) DataFrame indexed by SentrixID,
     aligned to the same sample order as pdata.
+
+    CORRECTED 2026-05-22 (Helen Zhao): this function no longer variance-ranks
+    the TF panel to a fixed cohort-wide top-150 list. ``tf_act.var(axis=0)``
+    was a variance rank computed across all cohort samples; baking that into
+    the matrix lets held-out test rows decide which TFs exist -- the same
+    train/test leak class caught for Tier 2. The full TF activity matrix is
+    written instead; the top-N TF variance ranking is fit per training fold
+    downstream by PairedPreprocessor (design doc Section 4.2). PROGENy (a
+    fixed 14-pathway curated panel) stays leakage-free and is kept as-is.
 
     PROGENy and TF activity parquets are indexed by AMC-ID
     (e.g. 'AMC-280058-POST-IOP').  We re-index them to SentrixID using the
@@ -218,21 +321,27 @@ def build_tier1_rna(
     """
     logger.info("Loading PROGENy activity ...")
     progeny = pd.read_parquet(latest_dir / "progeny_activity_emory.parquet")
-    logger.info("  PROGENy: %s", progeny.shape)
+    logger.info("  PROGENy: %s (fixed 14-pathway panel, leakage-free)", progeny.shape)
 
     logger.info("Loading TF activity ...")
     tf_act = pd.read_parquet(latest_dir / "tf_activity_emory.parquet")
-    logger.info("  TF activity: %s", tf_act.shape)
+    logger.info(
+        "  TF activity: %s -- ALL TFs retained; per-fold variance rank applied "
+        "downstream (NO cohort-wide top-N baked here)",
+        tf_act.shape,
+    )
 
-    # Select top TFs by variance across samples
-    tf_var = tf_act.var(axis=0).sort_values(ascending=False)
-    top_tfs = tf_var.head(TOP_TF_BY_VARIANCE).index.tolist()
-    tf_top = tf_act[top_tfs].copy()
-    logger.info("  TF: selected %d top-variance TFs of %d", len(top_tfs), tf_act.shape[1])
-
-    # Concatenate PROGENy + TF
-    rna_act = pd.concat([progeny, tf_top], axis=1)
-    logger.info("RNA activity features combined: %s (AMC-ID index)", rna_act.shape)
+    # Concatenate PROGENy (fixed) + the FULL TF activity matrix (candidate set).
+    # No cohort-wide variance ranking is applied here -- that is a data-driven
+    # selection and is fit per training fold by PairedPreprocessor.
+    rna_act = pd.concat([progeny, tf_act], axis=1)
+    logger.info(
+        "RNA Tier 1 CANDIDATE matrix combined: %s (AMC-ID index) -- "
+        "%d PROGENy + %d TF, cv_loop_safe=False",
+        rna_act.shape,
+        progeny.shape[1],
+        tf_act.shape[1],
+    )
 
     # Re-index to SentrixID via pdata amc_id column
     amc_to_sentrix = {row["amc_id"]: idx for idx, row in pdata.iterrows()}
@@ -392,8 +501,13 @@ def main() -> None:
     # --- Tier 1 DNAm ---
     m_tier1, sig_table, n_tier1_cpgs = build_tier1_dnam(m_df, LATEST_DIR)
 
-    # Write Tier 1 DNAm matrix
-    m_tier1.to_parquet(out_dir / "feature_matrix_tier1_dnam.parquet")
+    # Write Tier 1 DNAm matrix + provenance sidecar.
+    # cv_loop_safe=True: Tier 1 is a fixed biological prior (CellDMC FDR<0.10),
+    # not a cohort-data-driven selection, so it carries no train/test leakage.
+    # The sidecar is required by the fail-closed loader (assert_cv_loop_safe).
+    tier1_dnam_path = out_dir / "feature_matrix_tier1_dnam.parquet"
+    m_tier1.to_parquet(tier1_dnam_path)
+    _stamp_tier1_provenance(tier1_dnam_path, TIER1_DNAM_PROVENANCE)
     logger.info("Written: feature_matrix_tier1_dnam.parquet %s", m_tier1.shape)
 
     # Write sig table (subset of celldmc for Tier 1 CpGs)
@@ -405,9 +519,14 @@ def main() -> None:
     (out_dir / "tier1_cpg_list.txt").write_text("\n".join(tier1_cpg_list) + "\n")
     logger.info("Written: tier1_cpg_list.txt (%d CpGs)", len(tier1_cpg_list))
 
-    # --- Tier 1 RNA (PROGENy + TF activity) ---
+    # --- Tier 1 RNA (PROGENy fixed + ALL TF activities; candidate set) ---
+    # cv_loop_safe=False: PROGENy is a fixed curated panel, but the TF panel
+    # was previously a cohort-wide variance rank (leak). The full TF matrix is
+    # written; the top-N TF variance rank is fit per fold downstream.
+    tier1_rna_path = out_dir / "feature_matrix_tier1_rna.parquet"
     rna_tier1 = build_tier1_rna(pdata, LATEST_DIR)
-    rna_tier1.to_parquet(out_dir / "feature_matrix_tier1_rna.parquet")
+    rna_tier1.to_parquet(tier1_rna_path)
+    _stamp_tier1_provenance(tier1_rna_path, TIER1_RNA_PROVENANCE)
     logger.info("Written: feature_matrix_tier1_rna.parquet %s", rna_tier1.shape)
 
     # --- Canonical CellDMC parquet (alias for feature_selection.py) ---
@@ -467,10 +586,10 @@ def main() -> None:
         CELLDMC_FDR_THRESHOLD,
     )
     logger.info(
-        "Tier 1 RNA:  %d samples x %d activity features (PROGENy + top-%d TFs)",
+        "Tier 1 RNA:  %d samples x %d candidate features (14 PROGENy fixed + "
+        "all TFs; per-fold TF variance rank downstream -- cv_loop_safe=False)",
         rna_tier1.shape[0],
         rna_tier1.shape[1],
-        TOP_TF_BY_VARIANCE,
     )
     logger.info(
         "Tier 2 DNAm: %d samples x %d candidate CpGs (beta-range filter only; "
