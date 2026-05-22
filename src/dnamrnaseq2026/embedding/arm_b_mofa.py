@@ -154,8 +154,10 @@ def _fit_mofapy2(
     ent.build()
     ent.run()
 
+    # mofapy2 0.7.4 getExpectations(): Z is {'E', 'E2'} (a single-group fit is
+    # not nested under the group name); W is a per-view list of {'E', ...}.
     expectations = ent.model.getExpectations()
-    scores = np.asarray(expectations["Z"]["single_group"]["E"])
+    scores = np.asarray(expectations["Z"]["E"])
     loadings = {v: np.asarray(expectations["W"][i]["E"]) for i, v in enumerate(view_names)}
     return scores, loadings
 
@@ -176,6 +178,52 @@ def _fit_random_intercept_lmm(
     s_between = float(result.cov_re.iloc[0, 0])
     s_within = float(result.scale)
     return s_between, s_within, float(result.llf)
+
+
+def _anova_variance_components(
+    y: np.ndarray,
+    subject: np.ndarray,
+) -> tuple[float, float]:
+    """Closed-form one-way ANOVA variance-component estimator (s_between^2, s_within^2).
+
+    For a random-intercept design ``z = beta0 + b_i + e``, the method-of-moments
+    (ANOVA) estimator is exact for a balanced design and matches REML closely
+    for the mildly unbalanced case. It is ~1000x faster than an iterative
+    ``MixedLM.fit`` and is used for the bootstrap inner loop, where tens of
+    thousands of fits would otherwise dominate runtime. The reported point
+    estimate still uses the full ML ``MixedLM`` fit (:func:`_fit_random_intercept_lmm`).
+
+    Formula (Searle, Casella & McCulloch 1992, balanced one-way model):
+    ``MS_within = SS_within / (N - a)``; ``MS_between = SS_between / (a - 1)``;
+    ``s_within^2 = MS_within``; ``s_between^2 = (MS_between - MS_within) / n0``,
+    where ``a`` is the subject count and ``n0`` the (harmonic-style) average
+    replicate count. Negative ``s_between^2`` estimates are truncated to 0 (the
+    boundary), which is the standard convention.
+    """
+    uniq, inverse = np.unique(subject, return_inverse=True)
+    a = len(uniq)
+    n_total = len(y)
+    if a < 2 or n_total <= a:
+        return 0.0, float(np.var(y))
+
+    grand_mean = y.mean()
+    group_sums = np.bincount(inverse, weights=y)
+    group_counts = np.bincount(inverse).astype(np.float64)
+    group_means = group_sums / group_counts
+
+    ss_between = float(np.sum(group_counts * (group_means - grand_mean) ** 2))
+    ss_within = float(np.sum((y - group_means[inverse]) ** 2))
+
+    ms_between = ss_between / (a - 1)
+    ms_within = ss_within / (n_total - a)
+
+    # n0: balanced-design correction for unequal group sizes.
+    n0 = (n_total - float(np.sum(group_counts**2)) / n_total) / (a - 1)
+    if n0 <= 0:
+        n0 = 1.0
+    s_between = max(0.0, (ms_between - ms_within) / n0)
+    s_within = max(ms_within, 1e-12)
+    return float(s_between), float(s_within)
 
 
 def _null_loglik(y: np.ndarray) -> float:
@@ -253,13 +301,32 @@ def classify_factors(
         pval = state_eligibility_lrt(llf_h1, llf_h0)
         pvals.append(pval)
 
-        # Subject-clustered bootstrap CI on ICC (B per Lee's repeated-measures rule).
+        # Subject-clustered bootstrap CI on ICC (B per Lee's repeated-measures
+        # rule). The inner loop uses the closed-form ANOVA variance-component
+        # estimator (_anova_variance_components), not an iterative MixedLM fit:
+        # B=2000 x K factors iterative fits would dominate runtime, and the
+        # ANOVA estimator is exact for the balanced random-intercept design.
+        # NOTE: resampling subjects with replacement duplicates subjects whose
+        # within-subject visit pair is identical across copies, which inflates
+        # the between-subject variance and biases the bootstrap ICC upward
+        # relative to the point estimate. The reported point ICC (ML MixedLM) is
+        # the primary quantity; the CI is a dispersion indicator carrying this
+        # documented upward bias. See the Arm B findings note.
         boot_icc: list[float] = []
+        # Pre-index observation rows per subject once, outside the resample loop.
+        rows_by_subj = {s: np.where(subject == s)[0] for s in unique_subj}
+        # Relabel duplicated subjects so each bootstrap copy is its own cluster.
         for _ in range(n_bootstrap):
             picks = rng.choice(unique_subj, size=len(unique_subj), replace=True)
-            mask = np.concatenate([np.where(subject == s)[0] for s in picks])
-            yb = y[mask]
-            sb_b, sw_b, _ = _fit_random_intercept_lmm(yb, subject[mask])
+            yb_parts: list[np.ndarray] = []
+            lab_parts: list[np.ndarray] = []
+            for copy_idx, s in enumerate(picks):
+                subj_rows = rows_by_subj[s]
+                yb_parts.append(y[subj_rows])
+                lab_parts.append(np.full(len(subj_rows), copy_idx))
+            yb = np.concatenate(yb_parts)
+            lab = np.concatenate(lab_parts)
+            sb_b, sw_b = _anova_variance_components(yb, lab)
             boot_icc.append(compute_icc(sb_b, sw_b))
         ci_low, ci_high = np.percentile(boot_icc, [2.5, 97.5])
 
