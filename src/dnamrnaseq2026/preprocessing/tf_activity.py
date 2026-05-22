@@ -43,12 +43,17 @@ def get_collectri_net(
 ) -> pd.DataFrame:
     """Load CollecTRI regulon network via decoupler-py.
 
+    Compatible with both decoupler 1.x (``decoupler.get_collectri``) and
+    decoupler 2.x (``decoupler.op.collectri``).
+
     Parameters
     ----------
     organism:
         ``'human'`` or ``'mouse'``.
     split_complexes:
-        Whether to split TF complexes into individual subunits.
+        Whether to split TF complexes into individual subunits.  In
+        decoupler 2.x this parameter is named ``remove_complexes`` (inverted
+        semantics); both are handled transparently.
     min_targets:
         Drop TFs with fewer than this many unique targets.
 
@@ -60,9 +65,18 @@ def get_collectri_net(
     try:
         import decoupler
 
-        net: pd.DataFrame = decoupler.get_collectri(
-            organism=organism, split_complexes=split_complexes
-        )
+        # decoupler 2.x: decoupler.op.collectri
+        if hasattr(decoupler, "op") and hasattr(decoupler.op, "collectri"):
+            # 2.x uses remove_complexes (inverted logic relative to split_complexes)
+            net: pd.DataFrame = decoupler.op.collectri(
+                organism=organism, remove_complexes=not split_complexes
+            )
+        elif hasattr(decoupler, "get_collectri"):
+            # decoupler 1.x legacy
+            net = decoupler.get_collectri(organism=organism, split_complexes=split_complexes)
+        else:
+            raise AttributeError("Could not find CollecTRI loader in decoupler API.")
+
         # Filter to TFs with at least min_targets
         counts = net.groupby("source")["target"].nunique()
         keep_tfs = counts[counts >= min_targets].index
@@ -104,6 +118,31 @@ def _synthetic_collectri_net(n_tfs: int = 5, n_targets: int = 10) -> pd.DataFram
 # ---------------------------------------------------------------------------
 
 
+def _strip_ensembl_prefix(gene_ids: list[str]) -> list[str]:
+    """Convert Ensembl+symbol IDs to gene symbols.
+
+    Handles the 'ENSG00000..._SYMBOL' format from the mmVAE RNA-seq pipeline.
+    Duplicates after stripping are made unique with '_1', '_2' suffixes.
+    """
+    symbols = []
+    for g in gene_ids:
+        parts = g.split("_", 1)
+        if len(parts) == 2 and parts[0].startswith("ENSG"):
+            symbols.append(parts[1])
+        else:
+            symbols.append(g)
+    seen: dict[str, int] = {}
+    result: list[str] = []
+    for sym in symbols:
+        if sym in seen:
+            seen[sym] += 1
+            result.append(f"{sym}_{seen[sym]}")
+        else:
+            seen[sym] = 0
+            result.append(sym)
+    return result
+
+
 def run_tf_ulm(
     log_cpm: np.ndarray[Any, Any],
     gene_ids: list[str],
@@ -112,12 +151,17 @@ def run_tf_ulm(
 ) -> pd.DataFrame:
     """Run TF activity inference via decoupler ULM on CollecTRI regulons.
 
+    Gene IDs are converted to gene symbols before matching against the
+    CollecTRI network (handles Ensembl+symbol format from the mmVAE pipeline).
+
+    Compatible with both decoupler 1.x and 2.x APIs.
+
     Parameters
     ----------
     log_cpm:
         2-D array (n_genes, n_samples), log-CPM expression.
     gene_ids:
-        Gene identifiers (rows).
+        Gene identifiers (rows).  May be in 'ENSG..._SYMBOL' format.
     sample_ids:
         Sample identifiers (columns).
     net:
@@ -131,9 +175,24 @@ def run_tf_ulm(
     try:
         import decoupler
 
-        mat = pd.DataFrame(log_cpm.T, index=sample_ids, columns=gene_ids)
-        estimates, _ = decoupler.run_ulm(mat=mat, net=net, verbose=False)
-        result_df: pd.DataFrame = pd.DataFrame(estimates)
+        symbols = _strip_ensembl_prefix(gene_ids)
+        mat = pd.DataFrame(log_cpm.T, index=sample_ids, columns=symbols)
+
+        # decoupler 2.x: decoupler.mt.ulm(data, net) returns (estimates, pvals)
+        if hasattr(decoupler, "mt") and hasattr(decoupler.mt, "ulm"):
+            out = decoupler.mt.ulm(data=mat, net=net)
+            estimates = out[0] if isinstance(out, tuple) else out
+            if isinstance(estimates, pd.DataFrame):
+                result_df = estimates
+            else:
+                result_df = pd.DataFrame(estimates)
+        elif hasattr(decoupler, "run_ulm"):
+            # decoupler 1.x legacy
+            estimates, _ = decoupler.run_ulm(mat=mat, net=net, verbose=False)
+            result_df = pd.DataFrame(estimates)
+        else:
+            raise AttributeError("Could not find ULM runner in decoupler API.")
+
         logger.info(
             "CollecTRI ULM complete: %d samples x %d TFs.",
             result_df.shape[0],

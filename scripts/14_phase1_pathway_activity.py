@@ -52,17 +52,21 @@ def main() -> None:
     log_cpm = log_cpm_df.values.astype(np.float64)
     sample_ids = list(log_cpm_df.columns)
 
-    _, pdata = load_emory()
+    # load_emory() returns (bvals, subject_data): subject_data indexed by AMC-IDs
+    # which match RNA-seq column names directly.  Do NOT use pdata_emory_with_epidish
+    # (Sentrix-indexed) for RNA-seq alignment -- it produces 0 shared samples.
+    _, subject_data = load_emory()
 
-    pdata_aug_path = LATEST_DIR / "pdata_emory_with_epidish.csv"
-    pdata_aug = pd.read_csv(pdata_aug_path, index_col=0) if pdata_aug_path.exists() else pdata
-
-    # Align RNA-seq samples to pdata
-    shared_samples = [s for s in pdata_aug.index if s in log_cpm_df.columns]
+    # Align RNA-seq samples to subject_data (AMC-ID index)
+    shared_samples = [s for s in subject_data.index if s in log_cpm_df.columns]
     if not shared_samples:
         shared_samples = sample_ids
     col_pos = [sample_ids.index(s) for s in shared_samples]
     lc_shared = log_cpm[:, col_pos]
+    logger.info(
+        "RNA-seq alignment: %d shared samples (subject_data AMC-IDs).",
+        len(shared_samples),
+    )
 
     # --- PROGENy pathway activity ---
     logger.info("Loading PROGENy network.")
@@ -94,7 +98,7 @@ def main() -> None:
     logger.info("GSVA activity: %s", gsva_activity.shape)
 
     # --- Paired delta ---
-    paired_subjects, pre_ids, post_ids = filter_paired_ids_rna(pdata_aug)
+    paired_subjects, pre_ids, post_ids = filter_paired_ids_rna(subject_data)
     pre_in_rna = [s for s in pre_ids if s in shared_samples]
     post_in_rna = [s for s in post_ids if s in shared_samples]
     n_pairs = min(len(pre_in_rna), len(post_in_rna))
@@ -112,7 +116,7 @@ def main() -> None:
     gsva_delta.to_parquet(LATEST_DIR / "gsva_delta_emory.parquet")
 
     # --- Response association test ---
-    pdata_pre_paired = pdata_aug.loc[pre_in_rna].copy()
+    pdata_pre_paired = subject_data.loc[pre_in_rna].copy()
     pdata_pre_paired.index = pd.Index(paired_rna)
 
     logger.info("Testing pathway-response association.")
