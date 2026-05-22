@@ -10,7 +10,7 @@ Two layers:
    is wrapped so the scaffold can run a fast synthetic-PCA surrogate when
    ``mofapy2`` training would be too slow for a unit test.
 
-2. **Trait-state classification (Helen override, replaces variance-ratio).**
+2. **Trait-state classification (ICC-continuum scheme).**
    Per fitted factor ``k``, a random-intercept LMM is fit on factor scores
    across subjects and visits:
 
@@ -22,8 +22,19 @@ Two layers:
      statistic follows a 50:50 mixture of chi2_0 and chi2_1 because the variance
      component is on the boundary of the parameter space (Self & Liang JASA 1987;
      Stram & Lee Biometrics 1994). BH-FDR across the K factors.
-   - Classification: Trait (ICC > 0.80 AND LRT fails to reject at q >= 0.10),
-     State (ICC < 0.50 AND LRT rejects at q < 0.10), Mixed otherwise.
+   - Classification (ICC-continuum): Trait (ICC > 0.85), State (ICC < 0.65),
+     Mixed otherwise. The LRT q-value is computed and reported as a per-factor
+     diagnostic column but does NOT gate classification.
+
+Decision-record amendment 2026-05-22: the prior rule was a two-criterion
+conjunction (Trait: ICC > 0.80 AND LRT fails to reject; State: ICC < 0.50 AND
+LRT rejects). At n=164 paired subjects the LRT rejects H0 for every factor
+(all q <= 6e-18) and no factor has ICC < 0.50, so both branches were jointly
+unreachable and all factors fell to "mixed". The conjunction is replaced by an
+ICC-continuum scheme, applied identically to all three arms; the LRT q-value is
+retained as a reported diagnostic. See
+99-admin/decisions/2026-05-22-phase2-trait-state-icc-continuum.md
+(Lee-approved 2026-05-22).
 
 The variance-ratio threshold is deprecated to a footnote synonym in the design
 doc and is NOT implemented here.
@@ -40,8 +51,13 @@ from scipy import stats
 
 logger = logging.getLogger(__name__)
 
-ICC_TRAIT_THRESHOLD = 0.80
-ICC_STATE_THRESHOLD = 0.50
+# ICC-continuum band edges (decision record 2026-05-22, Lee-approved). Trait if
+# ICC > 0.85, State if ICC < 0.65, Mixed in between. Edges are conventional, not
+# power-derived; fixed before any arm's factor structure was inspected.
+ICC_TRAIT_THRESHOLD = 0.85
+ICC_STATE_THRESHOLD = 0.65
+# LRT FDR threshold retained: the LRT q-value is still computed and reported as
+# a per-factor diagnostic, but it no longer gates classification.
 LRT_FDR_THRESHOLD = 0.10
 BOOTSTRAP_N = 2000
 
@@ -341,14 +357,16 @@ def classify_factors(
             }
         )
 
+    # ICC-continuum classification (decision record 2026-05-22, Lee-approved).
+    # The LRT q-value is computed and stored as the `lrt_qval` diagnostic column,
+    # but classification depends on the ICC band alone; the LRT no longer gates.
     qvals = _benjamini_hochberg(np.asarray(pvals))
     for row, q in zip(rows, qvals, strict=True):
         row["lrt_qval"] = float(q)
         icc = float(row["icc"])  # type: ignore[arg-type]
-        rejects = q < LRT_FDR_THRESHOLD
-        if icc > ICC_TRAIT_THRESHOLD and not rejects:
+        if icc > ICC_TRAIT_THRESHOLD:
             row["classification"] = "trait"
-        elif icc < ICC_STATE_THRESHOLD and rejects:
+        elif icc < ICC_STATE_THRESHOLD:
             row["classification"] = "state"
         else:
             row["classification"] = "mixed"
