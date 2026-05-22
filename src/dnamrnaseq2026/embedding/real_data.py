@@ -234,25 +234,52 @@ def build_rna_activity_matrix(
     paths: Phase1Paths | None = None,
     *,
     top_tf_by_variance: int = 150,
+    tf_rank_keys: list[str] | None = None,
 ) -> pd.DataFrame:
     """Assemble the Arm A RNA-side input: PROGENy + top-variance TF activity.
 
     Output is a sample-level frame indexed by ``{Subcode}-{Visit}`` activity
     keys (design Section 2.1: ~14 PROGENy + up to ``top_tf_by_variance`` TF
     scores). Raises :class:`Phase1ArtefactError` if both artefacts are stubs.
+
+    Leakage-safe TF selection (design Section 4.2)
+    ----------------------------------------------
+    The TF panel is a data-driven variance rank: ranking it over the whole
+    cohort lets held-out test sample-visits influence which TFs exist, the
+    train/test leak PRs #14-#16 closed for Arm B. ``tf_rank_keys`` restricts the
+    variance rank to the named sample-visit keys (the training rows of the
+    current outer fold / LOSO fit). All rows of the returned frame carry the
+    full PROGENy panel plus the TF panel ranked on the training rows only.
+    Passing ``None`` ranks over every row, which is correct ONLY when the caller
+    is producing a cohort-wide descriptive (non-CV-evaluated) matrix; any
+    CV / LOSO path MUST pass a training-row key list.
     """
     paths = paths or Phase1Paths()
     progeny = _read_activity(paths.resolve("progeny_activity"), "PROGENy pathway activity")
     tf = _read_activity(paths.resolve("tf_activity"), "decoupleR TF activity")
 
-    tf_var = tf.var(axis=0).sort_values(ascending=False)
+    if tf_rank_keys is not None:
+        rank_keys = [k for k in tf_rank_keys if k in tf.index]
+        if len(rank_keys) < 2:
+            raise Phase1ArtefactError(
+                f"TF variance rank needs >=2 training sample-visits; only "
+                f"{len(rank_keys)} of {len(tf_rank_keys)} requested keys are in "
+                "the TF activity index. The fold-training key set does not match "
+                "the activity-matrix index format."
+            )
+        tf_rank_block = tf.loc[rank_keys]
+    else:
+        tf_rank_block = tf
+    tf_var = tf_rank_block.var(axis=0).sort_values(ascending=False)
     top_tfs = tf_var.head(min(top_tf_by_variance, tf.shape[1])).index
     combined = pd.concat([progeny, tf[top_tfs]], axis=1)
     logger.info(
-        "RNA activity matrix: %d PROGENy + %d TF = %s",
+        "RNA activity matrix: %d PROGENy + %d TF = %s (TF rank on %d %s rows)",
         progeny.shape[1],
         len(top_tfs),
         combined.shape,
+        len(tf_rank_block),
+        "training-fold" if tf_rank_keys is not None else "cohort-wide",
     )
     return combined
 
@@ -398,8 +425,18 @@ def _stack_paired(
     )
 
 
-def build_arm_inputs(paths: Phase1Paths | None = None) -> ArmInputs:
+def build_arm_inputs(
+    paths: Phase1Paths | None = None,
+    *,
+    tf_rank_keys: list[str] | None = None,
+) -> ArmInputs:
     """Assemble the real-data per-arm inputs from the Phase 1 outputs.
+
+    ``tf_rank_keys`` is forwarded to :func:`build_rna_activity_matrix`: pass the
+    training-fold sample-visit keys so the TF variance panel is selected on
+    training rows only (design Section 4.2 leakage rule). ``None`` ranks the TF
+    panel cohort-wide, which is correct only for a descriptive, non-CV-evaluated
+    embedding; the leakage-clean LOSO path passes per-fold key lists.
 
     Wired-now configuration (design Section 2.1, Tier 2 fallback active):
 
@@ -420,7 +457,7 @@ def build_arm_inputs(paths: Phase1Paths | None = None) -> ArmInputs:
         raise Phase1ArtefactError(f"Phase 1 artefact directory absent: {paths.root}")
 
     pdata = load_emory_pdata(paths)
-    rna = build_rna_activity_matrix(pdata, paths)
+    rna = build_rna_activity_matrix(pdata, paths, tf_rank_keys=tf_rank_keys)
 
     dnam_cols = [c for c in EPIDISH_COLS if c in pdata.columns]
     if not dnam_cols:
