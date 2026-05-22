@@ -168,7 +168,40 @@ def test_arm_b_classify_factors_produces_labels() -> None:
     assert len(table) == 8
     assert set(table["classification"]).issubset({"trait", "state", "mixed"})
     assert (table["icc"].between(0.0, 1.0)).all()
+    # The LRT q-value is retained as a reported diagnostic column even though it
+    # no longer gates classification (decision record 2026-05-22).
     assert (table["lrt_qval"].between(0.0, 1.0)).all()
+
+
+def test_arm_b_classification_uses_icc_continuum_bands() -> None:
+    """ICC-continuum scheme (decision record 2026-05-22, Lee-approved): a factor
+    is trait if ICC > 0.85, state if ICC < 0.65, mixed in between; the LRT
+    q-value does not gate. This test locks the band edges and confirms the LRT
+    column has no effect on the label."""
+    from dnamrnaseq2026.embedding.arm_b_mofa import (
+        ICC_STATE_THRESHOLD,
+        ICC_TRAIT_THRESHOLD,
+    )
+
+    assert ICC_TRAIT_THRESHOLD == 0.85
+    assert ICC_STATE_THRESHOLD == 0.65
+
+    data = make_synthetic_paired(n_subjects=24, n_dnam=30, n_rna=18)
+    subjects = np.concatenate([data["subject_ids"], data["subject_ids"]])
+    visit = np.concatenate([np.zeros(24, dtype=int), np.ones(24, dtype=int)])
+    views = {
+        "dnam": np.vstack([data["dnam_pre"], data["dnam_post"]]),
+        "rna": np.vstack([data["rna_pre"], data["rna_post"]]),
+    }
+    factors = fit_mofa(views, subjects, visit, n_factors=8, use_surrogate=True)
+    table = classify_factors(factors, n_bootstrap=30, seed=0)
+    for _, r in table.iterrows():
+        if r["icc"] > ICC_TRAIT_THRESHOLD:
+            assert r["classification"] == "trait"
+        elif r["icc"] < ICC_STATE_THRESHOLD:
+            assert r["classification"] == "state"
+        else:
+            assert r["classification"] == "mixed"
 
 
 # ---------------------------------------------------------------------------
