@@ -42,7 +42,7 @@ learning) trained on the leakage-clean Phase 1 feature matrices (n=164 paired).
 | Metric | Arm A (FM) | Arm B (MOFA+) | Arm C (contrastive) |
 |--------|-----------|---------------|---------------------|
 | (i) Trajectory consistency | FAIL (med=0.014) | PASS (med=0.998) | FAIL (med=-0.005) |
-| (ii) Trait-state disentanglement | FAIL (trait=31, state=0) | FAIL (trait=0, state=0) | FAIL (trait=0, state=0) |
+| (ii) Trait-state disentanglement | FAIL (trait=31, state=0) | FAIL (trait=9, state=4, rho=0.33) | FAIL (trait=0, state=0) |
 | (iii) LOSO reconstruction (Delta-PCL MAE) | 14.828 | 14.129 | 14.029 |
 | (iv) Conformal coverage | not run | not run | not run |
 | (v) Biological coherence | pending Phase 1 re-run | pending Phase 1 re-run | pending Phase 1 re-run |
@@ -50,8 +50,12 @@ learning) trained on the leakage-clean Phase 1 feature matrices (n=164 paired).
 
 - No arm predicts Delta-PCL (MAE ~14 units; PCL range ~0-80; chance ~15)
 - Neural arms (A, C) overfit at n=164: trajectory consistency FAIL
-- ICC-continuum classification: all Arm B MOFA+ factors classified as "mixed"
-  (no trait-only or state-only factors), confirming no latent disentanglement
+- ICC-continuum classification (decision record 2026-05-22): Arm B's 20 MOFA+
+  factors classify as 9 trait / 4 state / 7 mixed (primary; JAK-STAT sensitivity
+  7/3/10). Metric (ii) Part (a) — interpretable trait and state structure —
+  passes; Part (b) — CCA cross-subspace independence — fails (rho_max=0.33,
+  above the 0.30 threshold), so the metric fails overall: the trait and state
+  subspaces are not cleanly separable. Arms A/C have no state factors at all
 - Full leaderboard: `analysis/latest/phase2_leaderboard.csv`
 
 ### CellDMC verification (decisive negative result)
