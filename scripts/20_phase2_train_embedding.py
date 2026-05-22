@@ -41,7 +41,9 @@ import numpy as np
 import torch
 
 from dnamrnaseq2026.embedding.arm_a_fm import ArmAConfig, ArmAEncoder, train_arm_a
+from dnamrnaseq2026.embedding.arm_ac_run import run_arm_ac
 from dnamrnaseq2026.embedding.arm_c_contrastive import ArmCConfig, ArmCEncoder, train_arm_c
+from dnamrnaseq2026.embedding.leaderboard import build_leaderboard
 from dnamrnaseq2026.embedding.real_data import ArmInputs, Phase1ArtefactError, build_arm_inputs
 
 logging.basicConfig(
@@ -154,6 +156,13 @@ def train(arm: str) -> None:
 
     GUARDED: requires a visible CUDA device. Do NOT invoke while the MedFict
     LLM panel holds the GPU.
+
+    For each selected arm this (a) trains the encoder and saves the weights,
+    (b) scores the arm on all six leaderboard metrics via
+    :func:`dnamrnaseq2026.embedding.arm_ac_run.run_arm_ac` (metric iii uses the
+    leakage-clean per-fold TF refit), and (c) writes the arm's leaderboard
+    entry CSV. The 3-arm leaderboard is completed by merging these with the
+    Arm B entry written by ``scripts/23_phase2_arm_b_run.py``.
     """
     device = _require_idle_gpu()
     LATEST_DIR.mkdir(parents=True, exist_ok=True)
@@ -163,11 +172,19 @@ def train(arm: str) -> None:
         train_arm_a(encoder, _arm_a_batch(inputs), epochs=50, device=device)
         torch.save(encoder.state_dict(), LATEST_DIR / "embedding_fm.pt")
         logger.info("Arm A trained -> %s", LATEST_DIR / "embedding_fm.pt")
+        arm_a_score = run_arm_ac("a", device=device, epochs=50)
+        board_a = build_leaderboard([arm_a_score])
+        board_a.to_csv(LATEST_DIR / "arm_a_leaderboard_entry.csv")
+        logger.info("Arm A leaderboard entry:\n%s", board_a.to_string())
     if arm in {"c", "all"}:
         encoder_c = _build_arm_c(inputs)
         train_arm_c(encoder_c, _arm_c_batch(inputs), epochs=50, device=device)
         torch.save(encoder_c.state_dict(), LATEST_DIR / "embedding_contrastive.pt")
         logger.info("Arm C trained -> %s", LATEST_DIR / "embedding_contrastive.pt")
+        arm_c_score = run_arm_ac("c", device=device, epochs=50)
+        board_c = build_leaderboard([arm_c_score])
+        board_c.to_csv(LATEST_DIR / "arm_c_leaderboard_entry.csv")
+        logger.info("Arm C leaderboard entry:\n%s", board_c.to_string())
 
 
 def main(argv: list[str] | None = None) -> int:
