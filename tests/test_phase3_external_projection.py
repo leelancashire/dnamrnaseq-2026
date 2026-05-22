@@ -358,7 +358,13 @@ def test_project_external_cohorts_planted_signal_preserved() -> None:
 
 
 def test_save_load_round_trip() -> None:
-    """ProjectionResult serialised then loaded must reproduce all arrays."""
+    """ProjectionResult serialised then loaded must reproduce all arrays.
+
+    Requires pyarrow (pandas parquet engine). Skipped in minimal CI
+    environments that do not have pyarrow installed; runs locally and in
+    the full integration suite.
+    """
+    pytest.importorskip("pyarrow")
     ext = _make_external_data()
     enc = _SyntheticAtlasEncoder()
     ptsd = _make_ptsd_data(d_latent=enc.d_latent)

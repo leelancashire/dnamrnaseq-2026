@@ -74,6 +74,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -105,7 +106,7 @@ class AtlasEncoder(Protocol):
     (Section 5.3 Step 3.3).
     """
 
-    def encode(self, rna_matrix: np.ndarray) -> np.ndarray:
+    def encode(self, rna_matrix: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         """Embed RNA expression into the atlas latent space.
 
         Parameters
@@ -421,12 +422,14 @@ def load_external_cohorts_from_parquet(
             f"GSE98793 centroid file {gse_centroid_path} has no row with index 'TRD'. "
             f"Available rows: {list(centroid_df.index)}"
         )
-    gse_trd_centroid_rna = centroid_df.loc["TRD"].values.astype(np.float64)
+    gse_trd_centroid_rna: npt.NDArray[np.float64] = np.asarray(
+        centroid_df.loc["TRD"].to_numpy(), dtype=np.float64
+    )
 
     # GSE98793 individual TRD samples (optional)
     if gse_sample_path is not None and gse_sample_path.exists():
         gse_df = pd.read_parquet(gse_sample_path)
-        gse_trd_rna = gse_df.values.astype(np.float64)
+        gse_trd_rna: npt.NDArray[np.float64] = np.asarray(gse_df.to_numpy(), dtype=np.float64)
         gse_trd_sample_ids = np.array(gse_df.index.tolist(), dtype=object)
         logger.info("Loaded GSE98793 TRD samples: %d samples", gse_trd_rna.shape[0])
     else:
@@ -658,14 +661,16 @@ def load_projection_result(output_dir: Path) -> ProjectionResult:
     gse_trd_centroid = np.array(prov_raw.pop("gse_trd_centroid_latent"), dtype=np.float64)
 
     return ProjectionResult(
-        terminus_latent=terminus_df[latent_cols].values.astype(np.float64),
-        gtex_latent=gtex_df[latent_cols].values.astype(np.float64),
-        gse_trd_latent=gse_df[latent_cols].values.astype(np.float64),
+        terminus_latent=np.asarray(terminus_df[latent_cols].to_numpy(), dtype=np.float64),
+        gtex_latent=np.asarray(gtex_df[latent_cols].to_numpy(), dtype=np.float64),
+        gse_trd_latent=np.asarray(gse_df[latent_cols].to_numpy(), dtype=np.float64),
         recovery_axis=axis.astype(np.float64),
-        terminus_recovery_score=terminus_df["recovery_score"].values.astype(np.float64),
-        subject_ids=terminus_df["subject_id"].values,
-        response=terminus_df["response"].values,
-        cohort=terminus_df["cohort"].values,
+        terminus_recovery_score=np.asarray(
+            terminus_df["recovery_score"].to_numpy(), dtype=np.float64
+        ),
+        subject_ids=np.asarray(terminus_df["subject_id"].to_numpy(), dtype=object),
+        response=np.asarray(terminus_df["response"].to_numpy(), dtype=object),
+        cohort=np.asarray(terminus_df["cohort"].to_numpy(), dtype=object),
         gtex_centroid_latent=gtex_centroid,
         gse_trd_centroid_latent=gse_trd_centroid,
         n_gtex=len(gtex_df),
