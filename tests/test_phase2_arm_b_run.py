@@ -13,10 +13,14 @@ import pandas as pd
 
 from dnamrnaseq2026.embedding.arm_b_mofa import classify_factors, fit_mofa
 from dnamrnaseq2026.embedding.arm_b_run import (
+    N_PROGENY_PATHWAYS,
+    TOP_TF_BY_VARIANCE,
+    ArmBData,
     _build_covariate_matrix,
     _flag_jakstat_outliers,
     _residualise,
 )
+from dnamrnaseq2026.embedding.feature_selection import select_top_tf_by_variance
 
 
 def test_residualise_removes_covariate_signal() -> None:
@@ -77,6 +81,64 @@ def test_build_covariate_matrix_mean_imputes() -> None:
     assert np.isfinite(cov).all()
     # The imputed Age cell takes the column mean of the observed values.
     assert np.isclose(cov[1, 1], np.mean([30.0, 40.0, 50.0]))
+
+
+def test_select_top_tf_by_variance_keeps_progeny_and_top_tfs() -> None:
+    """TF selection keeps all PROGENy columns and the highest-variance TFs.
+
+    This is the Tier 1 RNA leakage fix (Helen Zhao 2026-05-22): the TF panel is
+    a variance rank, so it must be selectable per fold rather than baked
+    cohort-wide. PROGENy's fixed columns are always kept.
+    """
+    rng = np.random.default_rng(7)
+    n = 50
+    # 3 PROGENy columns (low variance) + 6 TF columns with increasing variance.
+    cols = {f"progeny_{i}": rng.normal(scale=0.01, size=n) for i in range(3)}
+    for j in range(6):
+        cols[f"TF_{j}"] = rng.normal(scale=float(j + 1), size=n)
+    df = pd.DataFrame(cols)
+    keep = select_top_tf_by_variance(df, n_pathway=3, top_tf_by_variance=2)
+    # All 3 PROGENy columns kept, plus the 2 highest-variance TFs (TF_4, TF_5).
+    assert keep[:3] == ["progeny_0", "progeny_1", "progeny_2"]
+    assert set(keep[3:]) == {"TF_4", "TF_5"}
+
+
+def test_select_tf_panel_is_fold_dependent() -> None:
+    """ArmBData.select_tf_panel ranks TFs on the masked rows, so it is fold-aware.
+
+    Two disjoint row subsets with deliberately different TF variance structure
+    select different TF panels: this is exactly the per-fold behaviour the
+    leakage fix requires (a cohort-wide rank would be fold-invariant).
+    """
+    rng = np.random.default_rng(11)
+    n = 60
+    n_tf = TOP_TF_BY_VARIANCE + 10
+    rna = np.zeros((n, N_PROGENY_PATHWAYS + n_tf))
+    rna[:, :N_PROGENY_PATHWAYS] = rng.normal(scale=0.01, size=(n, N_PROGENY_PATHWAYS))
+    rna[:, N_PROGENY_PATHWAYS:] = rng.normal(size=(n, n_tf))
+    # First half: inflate variance of the last 10 TFs. Second half: inflate the first 10.
+    first = np.arange(n) < n // 2
+    rna[np.ix_(first, np.arange(N_PROGENY_PATHWAYS + n_tf - 10, N_PROGENY_PATHWAYS + n_tf))] *= 50
+    rna[np.ix_(~first, np.arange(N_PROGENY_PATHWAYS, N_PROGENY_PATHWAYS + 10))] *= 50
+    cols = np.array(
+        [f"P{i}" for i in range(N_PROGENY_PATHWAYS)] + [f"TF{j}" for j in range(n_tf)],
+        dtype=object,
+    )
+    data = ArmBData(
+        dnam=rng.normal(size=(n, 5)),
+        rna=rna,
+        rna_columns=cols,
+        subject_ids=np.repeat(np.arange(n // 2), 2),
+        visit=np.tile([0, 1], n // 2),
+        sentrix_ids=np.arange(n).astype(object),
+        jakstat_outlier=np.zeros(n, dtype=bool),
+    )
+    panel_first = data.select_tf_panel(row_mask=first)
+    panel_second = data.select_tf_panel(row_mask=~first)
+    # Both panels keep the 14 PROGENy + 150 TF columns.
+    assert panel_first.shape[1] == N_PROGENY_PATHWAYS + TOP_TF_BY_VARIANCE
+    # The two folds select genuinely different TF panels (not bit-identical).
+    assert not np.array_equal(panel_first, panel_second)
 
 
 def test_mofa_fit_extracts_factor_scores() -> None:

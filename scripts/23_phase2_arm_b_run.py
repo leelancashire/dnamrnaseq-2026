@@ -8,12 +8,15 @@ CPU ONLY. MOFA+ does not use the GPU; the GPU is reserved for the MedFict LLM
 panel. This script never imports torch and never touches CUDA.
 
 Pipeline (see dnamrnaseq2026.embedding.arm_b_run for detail):
-  1. Load Tier 1 DNAm + Tier 1 RNA matrices (CV-loop-safe loader).
+  1. Load Tier 1 DNAm (CV-loop-safe) + Tier 1 RNA candidate matrix. The RNA
+     TF panel is selected by variance per MOFA+ fit on the fit's training rows,
+     never cohort-wide (leakage fix, Helen Zhao 2026-05-22).
   2. Intersect on SentrixID -> 344 sample-visits, 164 paired subjects.
   3. Residualise sex + age + ancestry PCs out of both views.
   4. Fit MOFA+ (CPU), classify each factor trait/state/mixed via LMM-LRT.
   5. JAK-STAT sensitivity fit (15 outlier sample-visits excluded).
-  6. Score Arm B on the trajectory metrics over the state-factor subspace.
+  6. Score Arm B on the leaderboard. Metric (iii) uses the leakage-clean LOSO
+     that refits MOFA+ (and re-selects the TF panel) per held-out subject.
 
 Outputs:
   - analysis/latest/arm_b_factor_classification.csv      (primary)
@@ -32,7 +35,7 @@ import numpy as np
 import pandas as pd
 
 from dnamrnaseq2026.embedding.arm_b_mofa import MOFAFactors
-from dnamrnaseq2026.embedding.arm_b_run import run_arm_b
+from dnamrnaseq2026.embedding.arm_b_run import leakage_clean_loso_mae, run_arm_b
 from dnamrnaseq2026.embedding.leaderboard import build_leaderboard, score_arm
 from dnamrnaseq2026.embedding.real_data import Phase1ArtefactError
 
@@ -170,6 +173,27 @@ def main() -> None:
         n_bootstrap=N_BOOTSTRAP,
         seed=SEED,
     )
+
+    # Metric (iii) override: score_arm's LOSO runs LeaveOneOut on a delta_z that
+    # came from one cohort-wide MOFA+ fit, so the TF panel saw every held-out
+    # subject. Replace it with the leakage-clean LOSO that refits MOFA+ and
+    # re-selects the TF panel per held-out subject (Helen Zhao 2026-05-22). This
+    # is the only CV-evaluated leaderboard metric and the only one materially
+    # exposed to the Tier 1 RNA TF-selection leak.
+    clean_loso = leakage_clean_loso_mae(
+        result.data, delta_pcl, subjects, n_factors=N_FACTORS, seed=SEED
+    )
+    contaminated_mae = arm_score.metrics["iii_loso_reconstruction"].get("loso_mae")
+    arm_score.metrics["iii_loso_reconstruction"] = dict(clean_loso)
+    arm_score.metrics["iii_loso_reconstruction"]["selection"] = "leakage_clean_per_fold_mofa_refit"
+    logger.info(
+        "Metric (iii) leakage-clean LOSO: MAE %.3f over %d subjects "
+        "(contaminated single-fit LOSO was MAE %s)",
+        clean_loso["loso_mae"],
+        clean_loso["n_subjects"],
+        f"{contaminated_mae:.3f}" if isinstance(contaminated_mae, float) else "n/a",
+    )
+
     leaderboard = build_leaderboard([arm_score])
     leaderboard.to_csv(LATEST_DIR / "arm_b_leaderboard_entry.csv")
 

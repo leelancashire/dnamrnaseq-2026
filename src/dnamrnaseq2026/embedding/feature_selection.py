@@ -359,6 +359,68 @@ def load_feature_matrix_for_cv(matrix_path: Path) -> pd.DataFrame:
     return df
 
 
+def load_candidate_feature_matrix(matrix_path: Path) -> pd.DataFrame:
+    """Load a ``cv_loop_safe=False`` candidate matrix WITHOUT the CV-safety gate.
+
+    A candidate matrix (e.g. the Tier 1 RNA matrix: fixed PROGENy panel + the
+    full TF activity set) carries an unfinished, leaky data-driven selection
+    that MUST be completed per training fold before it reaches a held-out
+    evaluation. This loader is the explicit, named entry point for that route:
+    the caller takes responsibility for performing the per-fold selection
+    (variance / HVG ranking) downstream, which is why the ``cv_loop_safe``
+    gate is intentionally NOT applied here.
+
+    Use :func:`load_feature_matrix_for_cv` for finished, leakage-free matrices;
+    use this only when the caller will itself do fold-internal selection.
+
+    Raises
+    ------
+    Phase1ArtefactError
+        If the matrix is missing or a zero-byte stub.
+    """
+    if not matrix_path.exists() or matrix_path.stat().st_size == 0:
+        raise Phase1ArtefactError(f"Feature matrix missing or a zero-byte stub at {matrix_path}")
+    df = pd.read_parquet(matrix_path)
+    logger.info(
+        "Loaded candidate feature matrix %s: %s (cv_loop_safe gate bypassed; "
+        "caller must do per-fold selection)",
+        matrix_path.name,
+        df.shape,
+    )
+    return df
+
+
+def select_top_tf_by_variance(
+    rna_candidate: pd.DataFrame,
+    *,
+    n_pathway: int,
+    top_tf_by_variance: int = 150,
+) -> list[str]:
+    """Rank the TF columns of an RNA candidate matrix by variance, return top-N.
+
+    ``rna_candidate`` is the Tier 1 RNA candidate matrix: the first
+    ``n_pathway`` columns are the fixed PROGENy panel (always kept, never
+    ranked); the remaining columns are TF activity scores. The variance rank
+    MUST be computed on training rows only -- pass a training-fold subset, not
+    the full cohort, or the selection leaks held-out rows (design Section 4.2).
+
+    Returns the column list to keep: all ``n_pathway`` PROGENy columns followed
+    by the top ``top_tf_by_variance`` TF columns by variance.
+    """
+    pathway_cols = list(rna_candidate.columns[:n_pathway])
+    tf_block = rna_candidate.iloc[:, n_pathway:]
+    tf_var = tf_block.var(axis=0).sort_values(ascending=False)
+    top_tfs = [str(c) for c in tf_var.head(top_tf_by_variance).index]
+    logger.info(
+        "TF variance rank on %d training rows: %d PROGENy kept + top %d of %d TFs",
+        len(rna_candidate),
+        len(pathway_cols),
+        len(top_tfs),
+        tf_block.shape[1],
+    )
+    return [str(c) for c in pathway_cols] + top_tfs
+
+
 def assemble_rna_activity_features(
     pathway: pd.DataFrame | None,
     tf_activity: pd.DataFrame | None,
