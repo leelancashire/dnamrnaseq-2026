@@ -329,9 +329,9 @@ def build_two_anchor_recovery_axis(
 
 
 def project_onto_recovery_axis(
-    terminus_latent: np.ndarray,
-    recovery_axis_vec: np.ndarray,
-) -> np.ndarray:
+    terminus_latent: npt.NDArray[np.float64],
+    recovery_axis_vec: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
     """Project PTSD trajectory termini onto the two-anchor recovery axis.
 
     Parameters
@@ -351,7 +351,9 @@ def project_onto_recovery_axis(
             f"Dimension mismatch: terminus_latent has d={terminus_latent.shape[1]}, "
             f"recovery_axis has d={recovery_axis_vec.shape[0]}."
         )
-    scores = terminus_latent @ recovery_axis_vec
+    scores: npt.NDArray[np.float64] = np.asarray(
+        terminus_latent @ recovery_axis_vec, dtype=np.float64
+    )
     logger.debug(
         "Recovery scores: mean=%.4f, sd=%.4f, min=%.4f, max=%.4f",
         float(scores.mean()),
@@ -359,7 +361,7 @@ def project_onto_recovery_axis(
         float(scores.min()),
         float(scores.max()),
     )
-    return scores.astype(np.float64)
+    return scores
 
 
 # ---------------------------------------------------------------------------
